@@ -1,22 +1,22 @@
-  // src/app/main-menu-arbitre/page.tsx
+// src/app/main-menu-admin/page.tsx
 import { redirect } from "next/navigation"
 import { createSupabaseServerClient } from "@/lib/supabaseServer"
 
 export default async function MainMenuPage() {
   const supabase = await createSupabaseServerClient()
 
-  // Récupère l’utilisateur depuis le cookie
+  // Récupère l'utilisateur depuis le cookie
   const { data: { user } } = await supabase.auth.getUser()
  
   const { data: players, error: playerError } = await supabase
     .from("players")
-    .select("player_name,Arbitre")
+    .select("player_name,Admin")
     .eq("user_id", user?.id)
     .single()
 
   if (!user || playerError || !players) {
     redirect("/login") // Redirection côté serveur
-  } else if (players?.Admin === false){
+  } else if (players?.Admin=== false){
     redirect("/") 
   }
 
@@ -27,9 +27,6 @@ export default async function MainMenuPage() {
     redirect("/login")
   }
 
-
-
-
   // Si aucun joueur trouvé, rediriger vers la création de profil
   if (playerError || !players) {
     redirect("/complete-profile")
@@ -38,7 +35,7 @@ export default async function MainMenuPage() {
   return (
     <main className="flex flex-col items-center justify-start min-h-screen p-6 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900">
       <h1 className="text-4xl font-extrabold text-purple-400 mb-8 text-center tracking-wide">
-        ⚡ Bienvenue {playerName}
+        ⚡ Bienvenue {players.player_name}
       </h1>
 
       <div className="w-full max-w-md grid gap-4">
@@ -81,12 +78,13 @@ export default async function MainMenuPage() {
         </a>
 
         {/* Bouton déconnexion */}
-        <button
-          onClick={handleSignOut}
-          className="w-full bg-red-600 text-white py-3 rounded-xl hover:bg-red-700 transition text-center shadow-lg font-semibold"
-        >
-          Déconnexion
-        </button>
+        <form action={signOut}>
+          <button
+            type="submit"
+            className="w-full bg-red-600 text-white py-3 rounded-xl hover:bg-red-700 transition text-center shadow-lg font-semibold"
+          >
+            Déconnexion
+          </button>
         </form>
       </div>
     </main>
