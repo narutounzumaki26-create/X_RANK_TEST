@@ -29,7 +29,7 @@ export default async function MainMenuPage() {
 
   // Si aucun joueur trouvé, rediriger vers la création de profil
   if (playerError || !players) {
-    redirect("/complete-profile")
+    redirect("/signup")
   }
 
   return (
