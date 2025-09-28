@@ -5,6 +5,11 @@ import { supabase } from "@/lib/supabaseClient"
 
 export default function MainMenuClient({ playerName }: { playerName: string }) {
   const router = useRouter()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user){
+    router.push("/login")
+  }
+  
 
   async function handleSignOut() {
     await supabase.auth.signOut()
@@ -49,6 +54,13 @@ export default function MainMenuClient({ playerName }: { playerName: string }) {
           Inscription
         </a>
 
+        <a
+          href="/PetDashboard"
+          className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition text-center shadow-lg"
+        >
+          Solo Fight X
+        </a>
+
         {/* Bouton déconnexion */}
         <button
           onClick={handleSignOut}
@@ -60,3 +72,4 @@ export default function MainMenuClient({ playerName }: { playerName: string }) {
     </main>
   )
 }
+
