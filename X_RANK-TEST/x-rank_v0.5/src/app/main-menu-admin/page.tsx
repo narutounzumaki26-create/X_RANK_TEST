@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation"
 import { supabase } from "@/lib/supabaseClient"
 
-export default function MainMenuClient({ playerName }: { playerName: string }) {
+export default async function MainMenuClient({ playerName }: { playerName: string }) {
   const router = useRouter()
   const { data: { user } } = await supabase.auth.getUser()
   if (!user){
