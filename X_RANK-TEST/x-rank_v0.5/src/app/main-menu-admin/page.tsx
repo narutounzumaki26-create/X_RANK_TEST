@@ -1,19 +1,38 @@
-"use client"
+  // src/app/main-menu-arbitre/page.tsx
+import { redirect } from "next/navigation"
+import { createSupabaseServerClient } from "@/lib/supabaseServer"
 
-import { useRouter } from "next/navigation"
-import { supabase } from "@/lib/supabaseClient"
+export default async function MainMenuPage() {
+  const supabase = await createSupabaseServerClient()
 
-export default async function MainMenuClient({ playerName }: { playerName: string }) {
-  const router = useRouter()
+  // Récupère l’utilisateur depuis le cookie
   const { data: { user } } = await supabase.auth.getUser()
-  if (!user){
-    router.push("/login")
-  }
-  
+ 
+  const { data: players, error: playerError } = await supabase
+    .from("players")
+    .select("player_name,Arbitre")
+    .eq("user_id", user?.id)
+    .single()
 
-  async function handleSignOut() {
+  if (!user || playerError || !players) {
+    redirect("/login") // Redirection côté serveur
+  } else if (players?.Admin === false){
+    redirect("/") 
+  }
+
+  async function signOut() {
+    "use server"
+    const supabase = await createSupabaseServerClient()
     await supabase.auth.signOut()
-    router.push("/login")
+    redirect("/login")
+  }
+
+
+
+
+  // Si aucun joueur trouvé, rediriger vers la création de profil
+  if (playerError || !players) {
+    redirect("/complete-profile")
   }
 
   return (
@@ -68,8 +87,8 @@ export default async function MainMenuClient({ playerName }: { playerName: strin
         >
           Déconnexion
         </button>
+        </form>
       </div>
     </main>
   )
 }
-
