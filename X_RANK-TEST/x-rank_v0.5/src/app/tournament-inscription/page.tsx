@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from "next/navigation"
 
 import {
   Select,
@@ -42,6 +43,7 @@ type Bey = {
 };
 
 export default function TournamentInscriptionPage() {
+  const router = useRouter()
   const [players, setPlayers] = useState<Player[]>([]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [beys, setBeys] = useState<Bey[]>([]);
