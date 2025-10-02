@@ -44,6 +44,23 @@ type Bey = {
 
 export default function TournamentInscriptionPage() {
   const router = useRouter()
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      const { data: players, error: playerError } = await supabase
+      .from("players")
+      .select("player_name,Admin")
+      .eq("user_id", user?.id)
+      .single()
+
+      if (!user || playerError || !players) {
+        router.push("/login");
+      } else if (players?.Admin === false) {
+        router.push("/");
+      }
+    };
+
+    checkAuth();}, [supabase, router, players]);
   const [players, setPlayers] = useState<Player[]>([]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [beys, setBeys] = useState<Bey[]>([]);
