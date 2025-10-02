@@ -22,7 +22,9 @@ export default function TournamentManagementPage() {
       .select("player_name,Admin")
       .eq("user_id", user?.id)
       .single()
-      if (players?.Admin === false) {
+      if (!user || playerError || !players) {
+        router.push("/login");
+      } else if (players?.Admin === false) {
         router.push("/");
       }
     };
