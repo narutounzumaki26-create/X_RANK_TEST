@@ -44,6 +44,7 @@ type Bey = {
 
 export default function TournamentInscriptionPage() {
   const router = useRouter()
+  const [players, setPlayers] = useState<Player[]>([]);
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser();
@@ -61,7 +62,6 @@ export default function TournamentInscriptionPage() {
     };
 
     checkAuth();}, [supabase, router, players]);
-  const [players, setPlayers] = useState<Player[]>([]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [beys, setBeys] = useState<Bey[]>([]);
 
@@ -75,24 +75,6 @@ export default function TournamentInscriptionPage() {
   const [assists, setAssists] = useState<{ assist_id: string; name: string; type?: string }[]>([]);
   const [lockChips, setLockChips] = useState<{ lock_chip_id: string; name: string; type?: string }[]>([]);
   const [ratchets, setRatchets] = useState<{ ratchet_id: string; name: string; type?: string }[]>([]);
-    useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: players, error: playerError } = await supabase
-      .from("players")
-      .select("player_name,Admin")
-      .eq("user_id", user?.id)
-      .single()
-
-      if (!user || playerError || !players) {
-        router.push("/login");
-      } else if (players?.Admin === false) {
-        router.push("/");
-      }
-    };
-
-    checkAuth();
-  }, [supabase, router, players]);
 
   useEffect(() => {
     const fetchPlayers = async () => {
