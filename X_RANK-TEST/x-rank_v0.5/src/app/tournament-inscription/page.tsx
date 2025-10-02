@@ -75,7 +75,7 @@ export default function TournamentInscriptionPage() {
     };
 
     checkAuth();
-  }, [supabase, router, playerError, players]);
+  }, [supabase, router, players]);
 
   useEffect(() => {
     const fetchPlayers = async () => {
