@@ -1,8 +1,7 @@
 "use client";
-
+import { useRouter } from "next/navigation";
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { useRouter } from "next/navigation"
 
 import {
   Select,
@@ -43,25 +42,24 @@ type Bey = {
 };
 
 export default function TournamentInscriptionPage() {
-  const router = useRouter()
+  const router = useRouter();
   const [players, setPlayers] = useState<Player[]>([]);
   useEffect(() => {
     const checkAuth = async () => {
       const { data: { user } } = await supabase.auth.getUser();
       const { data: players, error: playerError } = await supabase
-      .from("players")
-      .select("player_name,Admin")
-      .eq("user_id", user?.id)
-      .single()
-
-      if (!user || playerError || !players) {
-        router.push("/login");
-      } else if (players?.Admin === false) {
+        .from("players")
+        .select("Admin")
+        .eq("user_id", user?.id)
+        .single();
+      if (players?.Admin === false) {
         router.push("/");
       }
     };
 
-    checkAuth();}, [supabase, router, players]);
+    checkAuth();
+  }, [supabase, router, players]);
+
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [beys, setBeys] = useState<Bey[]>([]);
 
@@ -131,24 +129,21 @@ export default function TournamentInscriptionPage() {
   };
 
   const handleBeyPieceSelect = (
-  index: number,
-  type: BeyPieceKey,
-  value: string,
-  pieceType?: string
-) => {
-  const newBeys = [...beys];
+    index: number,
+    type: BeyPieceKey,
+    value: string,
+    pieceType?: string
+  ) => {
+    const newBeys = [...beys];
+    (newBeys[index][type] as string) = value;
 
-  // Forcer TypeScript à accepter que c'est bien un string
-  (newBeys[index][type] as string) = value;
+    if (pieceType) {
+      const typeKey = `${type}Type` as keyof Bey;
+      (newBeys[index][typeKey] as string) = pieceType;
+    }
 
-  if (pieceType) {
-    const typeKey = `${type}Type` as keyof Bey;
-    (newBeys[index][typeKey] as string) = pieceType;
-  }
-
-  setBeys(newBeys);
-};
-
+    setBeys(newBeys);
+  };
 
   const handleSubmit = async () => {
     if (!selectedPlayer || !selectedTournament) {
@@ -309,8 +304,12 @@ export default function TournamentInscriptionPage() {
                   </SelectTrigger>
                   <SelectContent className="bg-gray-900 text-white">
                     {options.map(o => {
-                      const idKey = `${pieceKey}_id` as keyof typeof o;
-                      const optionValue = o[idKey] as string;
+                      // 🔥 Fixed mapping for Lock Chip
+                      const idKey =
+                        pieceKey === "lockChip"
+                          ? "lock_chip_id"
+                          : `${pieceKey}_id`;
+                      const optionValue = o[idKey as keyof typeof o] as string;
                       return (
                         <SelectItem key={optionValue} value={optionValue}>
                           {o.name} {o.type ? `(${o.type})` : ""}
