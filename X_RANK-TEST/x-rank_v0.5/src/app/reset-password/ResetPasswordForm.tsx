@@ -7,8 +7,9 @@ import { supabase } from '@/lib/supabaseClient'
 function ResetPasswordFormContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const accessToken = searchParams?.get('access_token')
-  
+  const token = searchParams?.get('token')
+  const type = searchParams?.get('type')
+
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [message, setMessage] = useState('')
@@ -16,22 +17,14 @@ function ResetPasswordFormContent() {
   const [isTokenValid, setIsTokenValid] = useState(false)
 
   useEffect(() => {
-    if (accessToken) {
-      void (async () => {
-        setIsLoading(true)
-        const { error } = await supabase.auth.exchangeCodeForSession(accessToken)
-        if (error) {
-          setMessage('Invalid or expired reset link: ' + error.message)
-        } else {
-          setIsTokenValid(true)
-          setMessage('Please enter your new password')
-        }
-        setIsLoading(false)
-      })()
+    // Check if this is a valid password reset request
+    if (type === 'recovery' && token) {
+      setIsTokenValid(true)
+      setMessage('Please enter your new password')
     } else {
-      setMessage('Invalid reset link: missing token')
+      setMessage('Invalid or expired reset link')
     }
-  }, [accessToken])
+  }, [token, type])
 
   const handleReset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -56,27 +49,22 @@ function ResetPasswordFormContent() {
       return
     }
 
-    const { error } = await supabase.auth.updateUser({
-      password: newPassword
-    })
+    try {
+      const { error } = await supabase.auth.updateUser({
+        password: newPassword
+      })
 
-    if (error) {
-      setMessage('Error: ' + error.message)
-    } else {
-      setMessage('Password reset successfully!')
-      setTimeout(() => router.push('/login'), 2000)
+      if (error) {
+        setMessage('Error: ' + error.message)
+      } else {
+        setMessage('Password reset successfully! Redirecting to login...')
+        setTimeout(() => router.push('/login'), 2000)
+      }
+    } catch (error) {
+      setMessage('An unexpected error occurred.')
+    } finally {
+      setIsLoading(false)
     }
-    setIsLoading(false)
-  }
-
-  if (isLoading) {
-    return (
-      <main className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
-        <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow space-y-4">
-          <p className="text-center">Verifying reset link...</p>
-        </div>
-      </main>
-    )
   }
 
   return (
@@ -135,7 +123,6 @@ function ResetPasswordFormContent() {
   )
 }
 
-// Wrap with Suspense to handle useSearchParams
 export default function ResetPasswordForm() {
   return (
     <Suspense fallback={
