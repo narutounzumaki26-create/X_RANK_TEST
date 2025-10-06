@@ -110,12 +110,16 @@ function ResetPasswordFormContent() {
 
     // Listen for auth state changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+      console.log('Auth state changed:', event, session)
+      
+      if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'PASSWORD_RECOVERY') {
         setHasValidSession(true)
         setMessage('Veuillez entrer votre nouveau mot de passe')
-      } else if (event === 'SIGNED_OUT' || event === 'USER_DELETED') {
+      } else if (event === 'SIGNED_OUT') {
         setHasValidSession(false)
+        setMessage('Session expirée. Veuillez utiliser le lien de réinitialisation à nouveau.')
       }
+      // Note: 'USER_DELETED' is not a valid auth state change event in Supabase
     })
 
     return () => {
@@ -193,7 +197,7 @@ function ResetPasswordFormContent() {
         
         {message && (
           <div className={`p-3 rounded ${
-            message.includes('Erreur') || message.includes('invalide') || message.includes('Session') 
+            message.includes('Erreur') || message.includes('invalide') || message.includes('Session') || message.includes('expirée')
               ? 'bg-red-100 border border-red-400 text-red-700'
               : message.includes('succès')
               ? 'bg-green-100 border border-green-400 text-green-700'
