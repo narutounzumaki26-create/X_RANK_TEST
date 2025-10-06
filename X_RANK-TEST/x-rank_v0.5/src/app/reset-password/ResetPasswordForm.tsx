@@ -1,28 +1,14 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useSearchParams, useRouter } from 'next/navigation'
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
 export default function ResetPasswordForm() {
   const router = useRouter()
-  const searchParams = useSearchParams()
-  const code = searchParams?.get('code')
-
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [message, setMessage] = useState('')
-
-  useEffect(() => {
-    if (code) {
-      void (async () => {
-        const { error } = await supabase.auth.exchangeCodeForSession(code)
-        if (error) {
-          setMessage('Erreur: ' + error.message)
-        }
-      })()
-    }
-  }, [code])
 
   const handleReset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -39,7 +25,7 @@ export default function ResetPasswordForm() {
 
     const { error } = await supabase.auth.updateUser({ password: newPassword })
     if (error) {
-      setMessage('Erreur: ' + error.message)
+      setMessage('Erreur : ' + error.message)
     } else {
       setMessage('Mot de passe réinitialisé avec succès !')
       setTimeout(() => router.push('/login'), 2000)
@@ -49,7 +35,9 @@ export default function ResetPasswordForm() {
   return (
     <main className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
       <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow space-y-4">
-        <h1 className="text-2xl font-bold text-center">Réinitialisation du mot de passe</h1>
+        <h1 className="text-2xl font-bold text-center">
+          Réinitialisation du mot de passe
+        </h1>
         <form onSubmit={handleReset} className="space-y-3">
           <input
             type="password"
