@@ -1,14 +1,36 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useState, useEffect } from 'react'
+import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabaseClient'
 
 export default function ResetPasswordForm() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+
+  // 👇 get the correct token from the URL
+  const accessToken = searchParams.get('access_token')
+
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [message, setMessage] = useState('')
+  const [loading, setLoading] = useState(true)
+
+  // 👇 exchange the access token for a session
+  useEffect(() => {
+    const initSession = async () => {
+      if (accessToken) {
+        const { error } = await supabase.auth.exchangeCodeForSession(accessToken)
+        if (error) {
+          setMessage('Erreur : ' + error.message)
+        }
+      } else {
+        setMessage('Lien invalide ou manquant.')
+      }
+      setLoading(false)
+    }
+    initSession()
+  }, [accessToken])
 
   const handleReset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -32,12 +54,18 @@ export default function ResetPasswordForm() {
     }
   }
 
+  if (loading) {
+    return (
+      <main className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
+        <p>Chargement...</p>
+      </main>
+    )
+  }
+
   return (
     <main className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
       <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow space-y-4">
-        <h1 className="text-2xl font-bold text-center">
-          Réinitialisation du mot de passe
-        </h1>
+        <h1 className="text-2xl font-bold text-center">Réinitialisation du mot de passe</h1>
         <form onSubmit={handleReset} className="space-y-3">
           <input
             type="password"
