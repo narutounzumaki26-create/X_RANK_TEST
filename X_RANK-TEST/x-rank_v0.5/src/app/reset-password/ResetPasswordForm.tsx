@@ -14,15 +14,36 @@ function ResetPasswordFormContent() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [message, setMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [isTokenValid, setIsTokenValid] = useState(false)
+  const [isVerified, setIsVerified] = useState(false)
 
   useEffect(() => {
-    // Check if this is a valid password reset request
+    // Verify the token and type for password recovery
     if (type === 'recovery' && token) {
-      setIsTokenValid(true)
-      setMessage('Please enter your new password')
+      const verifyToken = async () => {
+        setIsLoading(true)
+        try {
+          // Use verifyOtp for recovery tokens
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash: token,
+            type: 'recovery'
+          })
+
+          if (error) {
+            setMessage('Lien de réinitialisation invalide ou expiré: ' + error.message)
+          } else {
+            setIsVerified(true)
+            setMessage('Veuillez entrer votre nouveau mot de passe')
+          }
+        } catch (error) {
+          setMessage('Erreur lors de la vérification du lien')
+        } finally {
+          setIsLoading(false)
+        }
+      }
+
+      verifyToken()
     } else {
-      setMessage('Invalid or expired reset link')
+      setMessage('Lien de réinitialisation invalide')
     }
   }, [token, type])
 
@@ -32,19 +53,19 @@ function ResetPasswordFormContent() {
     setIsLoading(true)
 
     if (!newPassword || !confirmPassword) {
-      setMessage('Please fill in all fields.')
+      setMessage('Veuillez remplir tous les champs.')
       setIsLoading(false)
       return
     }
 
     if (newPassword !== confirmPassword) {
-      setMessage('Passwords do not match.')
+      setMessage('Les mots de passe ne correspondent pas.')
       setIsLoading(false)
       return
     }
 
     if (newPassword.length < 6) {
-      setMessage('Password must be at least 6 characters long.')
+      setMessage('Le mot de passe doit contenir au moins 6 caractères.')
       setIsLoading(false)
       return
     }
@@ -55,68 +76,86 @@ function ResetPasswordFormContent() {
       })
 
       if (error) {
-        setMessage('Error: ' + error.message)
+        setMessage('Erreur: ' + error.message)
       } else {
-        setMessage('Password reset successfully! Redirecting to login...')
+        setMessage('Mot de passe réinitialisé avec succès ! Redirection...')
         setTimeout(() => router.push('/login'), 2000)
       }
     } catch (error) {
-      setMessage('An unexpected error occurred.')
+      setMessage('Une erreur inattendue est survenue.')
     } finally {
       setIsLoading(false)
     }
   }
 
+  if (isLoading) {
+    return (
+      <main className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
+        <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow space-y-4">
+          <p className="text-center">Vérification du lien...</p>
+        </div>
+      </main>
+    )
+  }
+
   return (
     <main className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
       <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow space-y-4">
-        <h1 className="text-2xl font-bold text-center">Reset Password</h1>
+        <h1 className="text-2xl font-bold text-center">Réinitialisation du mot de passe</h1>
         
-        {!isTokenValid && message && (
-          <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+        {message && (
+          <div className={`p-3 rounded ${
+            message.includes('Erreur') || message.includes('invalide') 
+              ? 'bg-red-100 border border-red-400 text-red-700'
+              : message.includes('succès')
+              ? 'bg-green-100 border border-green-400 text-green-700'
+              : 'bg-blue-100 border border-blue-400 text-blue-700'
+          }`}>
             {message}
           </div>
         )}
 
-        {isTokenValid && (
+        {isVerified && (
           <form onSubmit={handleReset} className="space-y-3">
             <input 
               type="password" 
-              placeholder="New password" 
+              placeholder="Nouveau mot de passe" 
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="w-full border rounded-lg p-2"
+              className="w-full border rounded-lg p-2 focus:border-blue-500 focus:outline-none"
               minLength={6}
               required
             />
             <input 
               type="password" 
-              placeholder="Confirm password" 
+              placeholder="Confirmer le mot de passe" 
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="w-full border rounded-lg p-2"
+              className="w-full border rounded-lg p-2 focus:border-blue-500 focus:outline-none"
               minLength={6}
               required
             />
-            
-            {message && (
-              <p className={`text-sm ${
-                message.includes('Error') || message.includes('invalid') 
-                  ? 'text-red-600' 
-                  : 'text-green-600'
-              }`}>
-                {message}
-              </p>
-            )}
             
             <button 
               type="submit" 
               disabled={isLoading}
-              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed"
+              className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700 disabled:bg-blue-400 disabled:cursor-not-allowed transition-colors"
             >
-              {isLoading ? 'Resetting...' : 'Reset Password'}
+              {isLoading ? 'Réinitialisation...' : 'Réinitialiser'}
             </button>
           </form>
+        )}
+
+        {!isVerified && !isLoading && (
+          <div className="text-center">
+            <p className="text-gray-600 mb-4">Si vous n'avez pas de lien valide, vous pouvez :</p>
+            <button 
+              onClick={() => router.push('/forgot-password')}
+              className="text-blue-600 hover:text-blue-800 underline"
+            >
+              Demander un nouveau lien de réinitialisation
+            </button>
+          </div>
         )}
       </div>
     </main>
@@ -128,7 +167,7 @@ export default function ResetPasswordForm() {
     <Suspense fallback={
       <main className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
         <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow">
-          <p className="text-center">Loading...</p>
+          <p className="text-center">Chargement...</p>
         </div>
       </main>
     }>
