@@ -7,45 +7,42 @@ import { supabase } from '@/lib/supabaseClient'
 function ResetPasswordFormContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const token = searchParams?.get('token')
-  const type = searchParams?.get('type')
 
   const [newPassword, setNewPassword] = useState('')
   const [confirmPassword, setConfirmPassword] = useState('')
   const [message, setMessage] = useState('')
   const [isLoading, setIsLoading] = useState(false)
-  const [isVerified, setIsVerified] = useState(false)
+  const [isReady, setIsReady] = useState(false)
 
   useEffect(() => {
-    // Verify the token and type for password recovery
-    if (type === 'recovery' && token) {
-      const verifyToken = async () => {
-        setIsLoading(true)
-        try {
-          // Use verifyOtp for recovery tokens
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: token,
-            type: 'recovery'
-          })
-
-          if (error) {
-            setMessage('Lien de réinitialisation invalide ou expiré: ' + error.message)
-          } else {
-            setIsVerified(true)
-            setMessage('Veuillez entrer votre nouveau mot de passe')
-          }
-        } catch {
-          setMessage('Erreur lors de la vérification du lien')
-        } finally {
-          setIsLoading(false)
-        }
+    // Listen for auth state changes
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange(async (event, session) => {
+      if (event === 'PASSWORD_RECOVERY') {
+        setIsReady(true)
+        setMessage('Veuillez entrer votre nouveau mot de passe')
+      } else if (event === 'SIGNED_IN') {
+        setIsReady(true)
+        setMessage('Veuillez entrer votre nouveau mot de passe')
       }
+    })
 
-      verifyToken()
-    } else {
-      setMessage('Lien de réinitialisation invalide')
+    // Check current session
+    const checkSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session) {
+        setIsReady(true)
+        setMessage('Veuillez entrer votre nouveau mot de passe')
+      } else {
+        setMessage('Veuillez utiliser le lien de réinitialisation depuis votre email')
+      }
     }
-  }, [token, type])
+
+    checkSession()
+
+    return () => subscription.unsubscribe()
+  }, [])
 
   const handleReset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
@@ -64,12 +61,6 @@ function ResetPasswordFormContent() {
       return
     }
 
-    if (newPassword.length < 6) {
-      setMessage('Le mot de passe doit contenir au moins 6 caractères.')
-      setIsLoading(false)
-      return
-    }
-
     try {
       const { error } = await supabase.auth.updateUser({
         password: newPassword
@@ -81,21 +72,11 @@ function ResetPasswordFormContent() {
         setMessage('Mot de passe réinitialisé avec succès ! Redirection...')
         setTimeout(() => router.push('/login'), 2000)
       }
-    } catch {
+    } catch (error) {
       setMessage('Une erreur inattendue est survenue.')
     } finally {
       setIsLoading(false)
     }
-  }
-
-  if (isLoading) {
-    return (
-      <main className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
-        <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow space-y-4">
-          <p className="text-center">Vérification du lien...</p>
-        </div>
-      </main>
-    )
   }
 
   return (
@@ -115,7 +96,7 @@ function ResetPasswordFormContent() {
           </div>
         )}
 
-        {isVerified && (
+        {isReady && (
           <form onSubmit={handleReset} className="space-y-3">
             <input 
               type="password" 
@@ -146,14 +127,14 @@ function ResetPasswordFormContent() {
           </form>
         )}
 
-        {!isVerified && !isLoading && (
+        {!isReady && (
           <div className="text-center">
-            <p className="text-gray-600 mb-4">Si vous n&apos;avez pas de lien valide, vous pouvez :</p>
+            <p className="text-gray-600 mb-4">Veuillez cliquer sur le lien de réinitialisation dans votre email.</p>
             <button 
               onClick={() => router.push('/forgot-password')}
               className="text-blue-600 hover:text-blue-800 underline"
             >
-              Demander un nouveau lien de réinitialisation
+              Renvoyer un lien de réinitialisation
             </button>
           </div>
         )}
