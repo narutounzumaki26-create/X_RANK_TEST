@@ -34,7 +34,7 @@ function ResetPasswordFormContent() {
             setIsVerified(true)
             setMessage('Veuillez entrer votre nouveau mot de passe')
           }
-        } catch (error) {
+        } catch {
           setMessage('Erreur lors de la vérification du lien')
         } finally {
           setIsLoading(false)
@@ -81,7 +81,7 @@ function ResetPasswordFormContent() {
         setMessage('Mot de passe réinitialisé avec succès ! Redirection...')
         setTimeout(() => router.push('/login'), 2000)
       }
-    } catch (error) {
+    } catch {
       setMessage('Une erreur inattendue est survenue.')
     } finally {
       setIsLoading(false)
@@ -148,7 +148,7 @@ function ResetPasswordFormContent() {
 
         {!isVerified && !isLoading && (
           <div className="text-center">
-            <p className="text-gray-600 mb-4">Si vous n'avez pas de lien valide, vous pouvez :</p>
+            <p className="text-gray-600 mb-4">Si vous n&apos;avez pas de lien valide, vous pouvez :</p>
             <button 
               onClick={() => router.push('/forgot-password')}
               className="text-blue-600 hover:text-blue-800 underline"
