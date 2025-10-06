@@ -7,8 +7,6 @@ import { supabase } from '@/lib/supabaseClient'
 export default function ResetPasswordForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-
-  // 👇 get the correct token from the URL
   const accessToken = searchParams.get('access_token')
 
   const [newPassword, setNewPassword] = useState('')
@@ -16,16 +14,17 @@ export default function ResetPasswordForm() {
   const [message, setMessage] = useState('')
   const [loading, setLoading] = useState(true)
 
-  // 👇 exchange the access token for a session
   useEffect(() => {
     const initSession = async () => {
       if (accessToken) {
-        const { error } = await supabase.auth.exchangeCodeForSession(accessToken)
-        if (error) {
-          setMessage('Erreur : ' + error.message)
-        }
+        // ✅ On crée une session avec uniquement l'access_token
+        const { error } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: ''
+        })
+        if (error) setMessage('Erreur : ' + error.message)
       } else {
-        setMessage('Lien invalide ou manquant.')
+        setMessage('Lien invalide ou expiré.')
       }
       setLoading(false)
     }
@@ -34,8 +33,6 @@ export default function ResetPasswordForm() {
 
   const handleReset = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    setMessage('')
-
     if (!newPassword || !confirmPassword) {
       setMessage('Veuillez remplir tous les champs.')
       return
@@ -49,23 +46,26 @@ export default function ResetPasswordForm() {
     if (error) {
       setMessage('Erreur : ' + error.message)
     } else {
-      setMessage('Mot de passe réinitialisé avec succès !')
+      setMessage('✅ Mot de passe réinitialisé avec succès !')
       setTimeout(() => router.push('/login'), 2000)
     }
   }
 
   if (loading) {
     return (
-      <main className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
+      <main className="flex items-center justify-center min-h-screen bg-gray-50">
         <p>Chargement...</p>
       </main>
     )
   }
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen p-6 bg-gray-50">
-      <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow space-y-4">
-        <h1 className="text-2xl font-bold text-center">Réinitialisation du mot de passe</h1>
+    <main className="flex items-center justify-center min-h-screen bg-gray-50">
+      <div className="w-full max-w-md bg-white p-6 rounded-2xl shadow">
+        <h1 className="text-2xl font-bold text-center mb-4">
+          Réinitialisation du mot de passe
+        </h1>
+
         <form onSubmit={handleReset} className="space-y-3">
           <input
             type="password"
@@ -74,6 +74,7 @@ export default function ResetPasswordForm() {
             onChange={(e) => setNewPassword(e.target.value)}
             className="w-full border rounded-lg p-2"
           />
+
           <input
             type="password"
             placeholder="Confirmer le mot de passe"
@@ -81,7 +82,17 @@ export default function ResetPasswordForm() {
             onChange={(e) => setConfirmPassword(e.target.value)}
             className="w-full border rounded-lg p-2"
           />
-          {message && <p className="text-red-600 text-sm">{message}</p>}
+
+          {message && (
+            <p
+              className={`text-sm ${
+                message.startsWith('Erreur') ? 'text-red-600' : 'text-green-600'
+              }`}
+            >
+              {message}
+            </p>
+          )}
+
           <button
             type="submit"
             className="w-full bg-blue-600 text-white py-2 rounded-lg hover:bg-blue-700"
