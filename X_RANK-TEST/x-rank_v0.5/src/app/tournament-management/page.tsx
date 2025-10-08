@@ -1,5 +1,5 @@
 'use client';
-import { useRouter } from "next/navigation";
+
 import { useEffect, useState, useCallback, useMemo } from 'react';
 import { supabase } from "@/lib/supabaseClient";
 
@@ -11,25 +11,6 @@ interface _piecesMap { blades: Record<string, string>; ratchets: Record<string, 
 interface RoundLog { round: number; player: 1 | 2; action: "Spin" | "Over" | "Burst" | "Xtreme"; points: number; winnerCombo: string; loserCombo: string; }
 
 export default function TournamentManagementPage() {
-
-  const router = useRouter()
-  const [players, setPlayers] = useState<Player[]>([]);
-  useEffect(() => {
-    const checkAuth = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: players, error: playerError } = await supabase
-      .from("players")
-      .select("player_name,Admin")
-      .eq("user_id", user?.id)
-      .single()
-      if (!user || playerError || !players) {
-        router.push("/login");
-      } else if (players?.Admin === false) {
-        router.push("/");
-      }
-    };
-
-    checkAuth();}, [supabase, router, players]);
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [selectedTournament, setSelectedTournament] = useState<string>('');
   const [participants, setParticipants] = useState<Player[]>([]);

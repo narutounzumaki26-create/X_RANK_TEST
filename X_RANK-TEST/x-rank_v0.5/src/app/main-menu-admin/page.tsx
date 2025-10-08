@@ -1,41 +1,20 @@
-// src/app/main-menu-admin/page.tsx
-import { redirect } from "next/navigation"
-import { createSupabaseServerClient } from "@/lib/supabaseServer"
+"use client"
 
-export default async function MainMenuPage() {
-  const supabase = await createSupabaseServerClient()
+import { useRouter } from "next/navigation"
+import { supabase } from "@/lib/supabaseClient"
 
-  // Récupère l'utilisateur depuis le cookie
-  const { data: { user } } = await supabase.auth.getUser()
- 
-  const { data: players, error: playerError } = await supabase
-    .from("players")
-    .select("player_name,Admin")
-    .eq("user_id", user?.id)
-    .single()
+export default function MainMenuClient({ playerName }: { playerName: string }) {
+  const router = useRouter()
 
-  if (!user || playerError || !players) {
-    redirect("/login") // Redirection côté serveur
-  } else if (players?.Admin=== false){
-    redirect("/") 
-  }
-
-  async function signOut() {
-    "use server"
-    const supabase = await createSupabaseServerClient()
+  async function handleSignOut() {
     await supabase.auth.signOut()
-    redirect("/login")
-  }
-
-  // Si aucun joueur trouvé, rediriger vers la création de profil
-  if (playerError || !players) {
-    redirect("/signup")
+    router.push("/login")
   }
 
   return (
     <main className="flex flex-col items-center justify-start min-h-screen p-6 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900">
       <h1 className="text-4xl font-extrabold text-purple-400 mb-8 text-center tracking-wide">
-        ⚡ Bienvenue {players.player_name}
+        ⚡ Bienvenue {playerName}
       </h1>
 
       <div className="w-full max-w-md grid gap-4">
@@ -70,22 +49,13 @@ export default async function MainMenuPage() {
           Inscription
         </a>
 
-        <a
-          href="/PetDashboard"
-          className="w-full bg-blue-600 text-white py-3 rounded-xl hover:bg-blue-700 transition text-center shadow-lg"
-        >
-          Solo Fight X
-        </a>
-
         {/* Bouton déconnexion */}
-        <form action={signOut}>
-          <button
-            type="submit"
-            className="w-full bg-red-600 text-white py-3 rounded-xl hover:bg-red-700 transition text-center shadow-lg font-semibold"
-          >
-            Déconnexion
-          </button>
-        </form>
+        <button
+          onClick={handleSignOut}
+          className="w-full bg-red-600 text-white py-3 rounded-xl hover:bg-red-700 transition text-center shadow-lg font-semibold"
+        >
+          Déconnexion
+        </button>
       </div>
     </main>
   )
