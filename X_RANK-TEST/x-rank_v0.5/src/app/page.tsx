@@ -1,77 +1,92 @@
-// src/app/page.tsx
-import Link from "next/link"
-import { createSupabaseServerClient } from "@/lib/supabaseServer"
-import { redirect } from "next/navigation"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+// ❌ supprime cette ligne
+// "use client";
+
+import Link from "next/link";
+import Image from "next/image";
+import { redirect } from "next/navigation";
+import { createSupabaseServerClient } from "@/lib/supabaseServer";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
+import { CyberPage } from "@/components/layout/CyberPage";
 
 export default async function HomePage() {
-  const supabase = await createSupabaseServerClient()
+  const supabase = await createSupabaseServerClient();
 
   const {
     data: { user },
-  } = await supabase.auth.getUser()
+  } = await supabase.auth.getUser();
 
   if (user) {
     const { data: playerData, error: playerError } = await supabase
       .from("players")
-      .select("*")
+      .select("Admin, Arbitre, player_id")
       .eq("user_id", user.id)
-      .maybeSingle()
+      .maybeSingle();
 
     if (playerError) {
-      console.error("Erreur supabase:", playerError)
-      redirect("/error")
+      console.error("Erreur Supabase:", playerError);
+      redirect("/user_app/login");
     }
 
     if (!playerData) {
-      console.error("Aucun joueur trouvé pour user:", user.id)
-      redirect("/signup")
+      console.warn("Aucun joueur trouvé pour user:", user.id);
+      redirect("/user_app/signup");
     }
 
-    if (playerData.Arbitre === false && playerData.Admin === false) {
-      redirect("/main-menu")
-    } else if (playerData.Arbitre === true) {
-      redirect("/main-menu-arbitre")
-    } else if (playerData.Admin === true) {
-      redirect("/main-menu-admin")
-    }
+    redirect("/user_app/main-menu");
   }
 
   return (
-    <main className="flex flex-col items-center justify-center min-h-screen p-6 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900">
-      <Card className="max-w-md w-full bg-gray-800/70 border-2 border-purple-500 rounded-2xl shadow-2xl p-6 space-y-6">
-        <CardHeader>
-          <CardTitle className="text-3xl text-purple-400 text-center font-extrabold">
-            ⚡ Bienvenue sur X-Rank
+    <CyberPage
+      centerContent
+      header={{ eyebrow: "system online", title: "X-Rank Systems", subtitle: "<Cyber Tournament Manager/>" }}
+      contentClassName="w-full items-center"
+    >
+      <Card className="relative w-full max-w-md bg-gray-950/90 border border-fuchsia-400 shadow-[0_0_20px_#ff00ff,0_0_40px_#00fff9] rounded-2xl p-8 backdrop-blur-md">
+        <CardHeader className="space-y-2">
+          <CardTitle className="flex justify-center">
+            <Image
+              src="/icons/logo.png"
+              alt="X-Rank Systems Logo"
+              width={220}
+              height={72}
+              className="drop-shadow-[0_0_12px_#00fff9]"
+              priority
+            />
           </CardTitle>
-          <CardDescription className="text-center text-gray-300">
-            Gérez vos tournois, matchs et composants facilement depuis votre smartphone ou ordinateur.
+          <CardDescription className="text-center italic tracking-wide text-[#00fff9]">
+            &lt;Cyber Tournament Manager/&gt;
           </CardDescription>
         </CardHeader>
-
-        <CardContent className="flex flex-col gap-4">
+        <CardContent className="flex flex-col gap-4 mt-4">
           <Link
-            href="/signup"
-            className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold text-center hover:bg-blue-700 transition"
+            href="/user_app/signup"
+            className="w-full rounded-xl border border-fuchsia-400 bg-gradient-to-r from-fuchsia-500 to-purple-600 py-3 text-center font-semibold uppercase tracking-wide shadow-[0_0_12px_#ff00ff] transition-transform hover:scale-[1.02] hover:shadow-[0_0_20px_#ff00ff]"
           >
-            Inscription
+            ► S&apos;inscrire au Système
           </Link>
-
           <Link
-            href="/login"
-            className="w-full bg-yellow-500 text-white py-3 rounded-xl font-semibold text-center hover:bg-yellow-600 transition"
+            href="/user_app/login"
+            className="w-full rounded-xl border border-cyan-400 bg-gradient-to-r from-green-400 to-cyan-500 py-3 text-center font-semibold uppercase tracking-wide shadow-[0_0_12px_#00fff9] transition-transform hover:scale-[1.02] hover:shadow-[0_0_20px_#00fff9]"
           >
-            Connexion
+            ► Connexion
           </Link>
-
           <Link
-            href="/components"
-            className="w-full bg-green-600 text-white py-3 rounded-xl font-semibold text-center hover:bg-green-700 transition"
+            href="/tournament_app/leaderboard"
+            className="w-full rounded-xl border border-cyan-400 bg-gradient-to-r from-emerald-400 to-cyan-500 py-3 text-center font-semibold uppercase tracking-wide shadow-[0_0_12px_#00fff9] transition-transform hover:scale-[1.02] hover:shadow-[0_0_20px_#00fff9]"
           >
-            Liste des composants
+            ► Classement Global
           </Link>
         </CardContent>
       </Card>
-    </main>
-  )
+      <p className="mt-6 text-xs font-mono uppercase tracking-[0.4em] text-gray-400">
+        ░ Awaiting user input ░
+      </p>
+    </CyberPage>
+  );
 }

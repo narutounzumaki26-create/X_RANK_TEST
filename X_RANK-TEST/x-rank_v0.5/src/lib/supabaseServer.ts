@@ -1,33 +1,40 @@
 // src/lib/supabaseServer.ts
-import { createServerClient } from '@supabase/ssr'
-import { cookies } from 'next/headers'
-import type { CookieOptions } from '@supabase/ssr'
+import { createServerClient, type CookieOptions } from "@supabase/ssr"
+import { cookies as getCookies } from "next/headers"
 
-export async function createSupabaseServerClient() {
-  const cookieStore = await cookies()
+export function createSupabaseServerClient() {
+  // 🧠 Compatibilité universelle : cookies() peut être sync ou async selon le runtime
+  const cookieStoreOrPromise = getCookies() as unknown
+
+  // Si cookies() renvoie une Promise (Edge/Vercel), on attend sa résolution
+  const getCookieStore = async () =>
+    cookieStoreOrPromise instanceof Promise
+      ? await cookieStoreOrPromise
+      : (cookieStoreOrPromise as ReturnType<typeof getCookies>)
 
   return createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
       cookies: {
-        get(name: string) {
+        async get(name: string) {
+          const cookieStore = await getCookieStore()
           return cookieStore.get(name)?.value
         },
-        set(name: string, value: string, options: CookieOptions) {
+        async set(name: string, value: string, options: CookieOptions) {
+          const cookieStore = await getCookieStore()
           try {
             cookieStore.set({ name, value, ...options })
           } catch {
-            // The `set` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing user sessions.
+            // ignore
           }
         },
-        remove(name: string, options: CookieOptions) {
+        async remove(name: string, options: CookieOptions) {
+          const cookieStore = await getCookieStore()
           try {
-            cookieStore.set({ name, value: '', ...options, maxAge: 0 })
+            cookieStore.set({ name, value: "", ...options, maxAge: 0 })
           } catch {
-            // The `delete` method was called from a Server Component.
-            // This can be ignored if you have middleware refreshing user sessions.
+            // ignore
           }
         },
       },
