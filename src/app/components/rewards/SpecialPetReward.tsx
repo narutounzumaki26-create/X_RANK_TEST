@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { UserBladeFull } from "@/app/solo_blade_app/types/pets";
 import { getPlayerIdForUser } from "@/lib/player"; 
