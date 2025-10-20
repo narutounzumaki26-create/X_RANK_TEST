@@ -293,7 +293,7 @@ export default function TournamentPage() {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData?.user;
     if (!user) {
-      setMessage("Impossible de récupérer l'utilisateur connecté.");
+      setMessage("Impossible de récupérer l&apos;utilisateur connecté.");
       return;
     }
 
@@ -304,7 +304,7 @@ export default function TournamentPage() {
       .single<{ player_id: string }>();
 
     if (playerError || !playerData) {
-      setMessage("Impossible de récupérer le player_id de l'admin.");
+      setMessage("Impossible de récupérer le player_id de l&apos;admin.");
       return;
     }
 
@@ -383,7 +383,7 @@ export default function TournamentPage() {
       .eq("inscription_id", participant.inscription_id);
 
     if (error) {
-      setMessage(`Erreur lors de l'association du deck : ${error.message}`);
+      setMessage(`Erreur lors de l&apos;association du deck : ${error.message}`);
       return;
     }
 
@@ -543,7 +543,7 @@ export default function TournamentPage() {
         header={{ title: "⚡ Gestion des Tournois", actions: <MainMenuButton /> }}
       >
         <p className="text-sm uppercase tracking-[0.3em] text-cyan-200">
-          Initialisation de l'interface...
+          Initialisation de l&apos;interface...
         </p>
       </CyberPage>
     );
