@@ -110,8 +110,8 @@ export default function TournamentPage() {
 
       setTournamentsList(tournamentsData ?? []);
 
-      const active = (tournamentsData ?? []).filter((t) =>
-        t.status === "planned" || t.status === "ongoing"
+      const active = (tournamentsData ?? []).filter(
+        (t) => t.status === "planned" || t.status === "ongoing"
       );
 
       if (active.length === 0) {
@@ -329,6 +329,29 @@ export default function TournamentPage() {
     setMaxCombos(3);
     await fetchManagementData();
     setMessage("Tournoi créé avec succès.");
+  };
+
+  // 🧩 NEW: Delete tournament handler
+  const handleDeleteTournament = async (tournamentId: string) => {
+    const confirmDelete = window.confirm(
+      "Êtes-vous sûr de vouloir supprimer ce tournoi ? Cette action est irréversible."
+    );
+    if (!confirmDelete) return;
+
+    setMessage("");
+
+    const { error } = await supabase
+      .from("tournaments")
+      .delete()
+      .eq("tournament_id", tournamentId);
+
+    if (error) {
+      setMessage(`Erreur lors de la suppression : ${error.message}`);
+      return;
+    }
+
+    await fetchManagementData();
+    setMessage("Tournoi supprimé avec succès.");
   };
 
   const handleAssignDeck = async (
@@ -553,240 +576,4 @@ export default function TournamentPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="grid gap-4 sm:grid-cols-2">
-          <input
-            className="w-full rounded border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-400"
-            placeholder="Nom du tournoi"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-          <input
-            className="w-full rounded border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-400"
-            placeholder="Lieu"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-          />
-          <textarea
-            className="col-span-2 w-full rounded border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-400"
-            placeholder="Description courte du tournoi"
-            value={description}
-            rows={3}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-          <input
-            className="w-full rounded border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white placeholder-gray-400"
-            type="date"
-            value={date}
-            onChange={(e) => setDate(e.target.value)}
-          />
-          <input
-            className="w-24 rounded border border-gray-700 bg-gray-800 px-3 py-2 text-sm text-white"
-            type="number"
-            min={1}
-            max={5}
-            value={maxCombos}
-            onChange={(e) => setMaxCombos(Number(e.target.value))}
-          />
-          <Button onClick={handleCreateTournament} className="col-span-2 bg-blue-500 hover:bg-blue-600">
-            Créer
-          </Button>
-          {message && (
-            <p className="col-span-2 text-sm text-amber-200">{message}</p>
-          )}
-        </CardContent>
-      </Card>
-
-      <section className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-2xl font-semibold text-white">{plannedTitle}</h2>
-          {loadingData && <span className="text-xs uppercase tracking-[0.3em] text-purple-200">Chargement…</span>}
-        </div>
-
-        {managedTournaments.length === 0 ? (
-          <p className="text-sm text-gray-300">
-            Aucun tournoi planifié pour le moment. Créez un tournoi ou attendez de nouvelles inscriptions.
-          </p>
-        ) : (
-          <div className="grid gap-4">
-            {managedTournaments.map((tournament) => (
-              <Card
-                key={tournament.tournament_id}
-                className="bg-gray-900/60 text-white shadow-lg border border-purple-500/30"
-              >
-                <CardHeader className="flex flex-col gap-3">
-                  <div className="flex flex-wrap items-start justify-between gap-3">
-                    <div>
-                      <CardTitle className="text-xl font-bold text-purple-200">{tournament.name}</CardTitle>
-                      <CardDescription className="text-sm text-gray-300">
-                        {tournament.date} {tournament.location && `- ${tournament.location}`} • Statut : {tournament.status}
-                      </CardDescription>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <Select
-                        value={winnerSelections[tournament.tournament_id] ?? ""}
-                        onValueChange={(value) =>
-                          setWinnerSelections((prev) => ({ ...prev, [tournament.tournament_id]: value }))
-                        }
-                      >
-                        <SelectTrigger className="min-w-[12rem] border-purple-500/40 bg-gray-800 text-sm text-white">
-                          <SelectValue placeholder="Choisir un vainqueur" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {tournament.participants.map((participant) => (
-                            <SelectItem key={participant.inscription_id} value={participant.player_id}>
-                              {participant.players?.player_name ?? participant.player_id}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <div className="flex gap-2">
-                        <Button
-                          className="bg-purple-500/30 text-purple-100 border border-purple-400/60 hover:bg-purple-500/40"
-                          onClick={() => handleManageMatches(tournament.tournament_id)}
-                        >
-                          Gérer les matchs
-                        </Button>
-                        <Button
-                          className="bg-emerald-500 text-black hover:bg-emerald-400"
-                          onClick={() => handleFinishTournament(tournament.tournament_id)}
-                        >
-                          Terminer le tournoi
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                  {tournament.description && (
-                    <p className="text-sm text-gray-300">{tournament.description}</p>
-                  )}
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {tournament.participants.length === 0 ? (
-                    <p className="text-sm text-gray-400">Aucun participant inscrit.</p>
-                  ) : (
-                    tournament.participants.map((participant) => {
-                      const decks = tournament.decks.filter(
-                        (deck) => deck.player_id === participant.player_id
-                      );
-
-                      return (
-                        <div
-                          key={participant.inscription_id}
-                          className="flex flex-col gap-3 rounded-lg border border-purple-500/30 bg-gray-950/70 p-4 sm:flex-row sm:items-center sm:justify-between"
-                        >
-                          <div>
-                            <p className="text-base font-semibold text-white">
-                              {participant.players?.player_name ?? participant.player_id}
-                            </p>
-                            <p className="text-xs text-gray-400">
-                              {participant.is_validated ? "Place confirmée" : "En attente de validation"}
-                              {typeof participant.placement === "number" &&
-                                ` • Position : ${participant.placement}`}
-                            </p>
-                          </div>
-                          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                            <Select
-                              value={participant.tournament_deck ?? "none"}
-                              onValueChange={(value) =>
-                                handleAssignDeck(
-                                  tournament.tournament_id,
-                                  participant,
-                                  value === "none" ? null : value
-                                )
-                              }
-                            >
-                              <SelectTrigger className="min-w-[12rem] border-purple-500/40 bg-gray-800 text-sm text-white">
-                                <SelectValue placeholder="Associer un deck" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                <SelectItem value="none">Aucun deck</SelectItem>
-                                {decks.length === 0 ? (
-                                  <SelectItem value="disabled" disabled>
-                                    Aucun deck enregistré
-                                  </SelectItem>
-                                ) : (
-                                  decks.map((deck) => (
-                                    <SelectItem key={deck.deck_id} value={deck.deck_id}>
-                                      {deckLabel(deck)}
-                                    </SelectItem>
-                                  ))
-                                )}
-                              </SelectContent>
-                            </Select>
-                            <div className="flex items-center gap-2">
-                              <label className="text-xs uppercase tracking-[0.3em] text-purple-200">
-                                Place
-                              </label>
-                              <input
-                                type="number"
-                                min={1}
-                                value={participant.placement ?? ""}
-                                onChange={(event) =>
-                                  handlePlacementChange(
-                                    tournament.tournament_id,
-                                    participant,
-                                    event.target.value
-                                  )
-                                }
-                                className="w-20 rounded border border-purple-500/40 bg-gray-800 px-2 py-1 text-sm text-white placeholder-gray-500"
-                                placeholder="-"
-                              />
-                            </div>
-                            <Button
-                              onClick={() => handleToggleValidation(tournament.tournament_id, participant)}
-                              className={
-                                participant.is_validated
-                                  ? "bg-red-500/80 text-white hover:bg-red-500"
-                                  : "bg-emerald-500 text-black hover:bg-emerald-400"
-                              }
-                            >
-                              {participant.is_validated ? "Annuler la validation" : "Valider la place"}
-                            </Button>
-                          </div>
-                        </div>
-                      );
-                    })
-                  )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-white">Historique des tournois</h2>
-        {tournamentsList.length === 0 ? (
-          <p className="text-sm text-gray-300">Aucun tournoi enregistré pour le moment.</p>
-        ) : (
-          <div className="grid gap-4">
-            {tournamentsList.map((t) => (
-              <Card
-                key={t.tournament_id}
-                className="bg-gray-900/60 text-white border border-gray-700/60 shadow-md"
-              >
-                <CardContent className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold">{t.name}</h3>
-                    <p className="text-sm text-gray-300">
-                      {t.date} {t.location && `- ${t.location}`} • Statut : {t.status}
-                    </p>
-                    {t.description && (
-                      <p className="text-xs text-gray-400">{t.description}</p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      className="bg-yellow-500/20 text-yellow-200 border border-yellow-400/70 hover:bg-yellow-500/30"
-                      onClick={() => handleManageMatches(t.tournament_id)}
-                    >
-                      Gérer
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </section>
-    </CyberPage>
-  );
-}
+         
