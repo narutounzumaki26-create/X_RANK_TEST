@@ -336,37 +336,67 @@ export default function TournamentPage() {
       return;
     }
 
-    setMessage("");
+    setMessage("Suppression en cours...");
 
     try {
-      // First delete related records to maintain referential integrity
-      const { error: participantsError } = await supabase
-        .from("tournament_participants")
+      console.log("Starting deletion process for tournament:", tournamentId);
+
+      // Delete in the correct order to respect foreign key constraints
+      // First delete tournament matches
+      const { error: matchesError } = await supabase
+        .from("tournament_matches")
         .delete()
         .eq("tournament_id", tournamentId);
 
-      if (participantsError) throw participantsError;
+      if (matchesError && !matchesError.message.includes("No rows found")) {
+        console.error("Error deleting matches:", matchesError);
+        // Continue anyway, as matches might not exist for this tournament
+      }
 
+      // Delete tournament decks
       const { error: decksError } = await supabase
         .from("tournament_decks")
         .delete()
         .eq("tournament_id", tournamentId);
 
-      if (decksError) throw decksError;
+      if (decksError) {
+        console.error("Error deleting decks:", decksError);
+        throw decksError;
+      }
 
-      // Then delete the tournament itself
+      // Delete tournament participants
+      const { error: participantsError } = await supabase
+        .from("tournament_participants")
+        .delete()
+        .eq("tournament_id", tournamentId);
+
+      if (participantsError) {
+        console.error("Error deleting participants:", participantsError);
+        throw participantsError;
+      }
+
+      // Finally delete the tournament itself
       const { error: tournamentError } = await supabase
         .from("tournaments")
         .delete()
         .eq("tournament_id", tournamentId);
 
-      if (tournamentError) throw tournamentError;
+      if (tournamentError) {
+        console.error("Error deleting tournament:", tournamentError);
+        throw tournamentError;
+      }
 
+      console.log("Tournament deleted successfully");
       setMessage("Tournoi supprimé avec succès.");
       await fetchManagementData();
+      
     } catch (err) {
-      console.error("Erreur suppression tournoi:", err);
-      setMessage(err instanceof Error ? err.message : "Erreur lors de la suppression du tournoi");
+      console.error("Detailed deletion error:", err);
+      setMessage(
+        err instanceof Error 
+          ? `Erreur lors de la suppression: ${err.message}` 
+          : "Erreur inconnue lors de la suppression du tournoi. Vérifiez la console pour plus de détails."
+      );
     }
   };
 
