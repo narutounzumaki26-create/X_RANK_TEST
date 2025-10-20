@@ -65,6 +65,7 @@ export default function TournamentInscriptionPage() {
 
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [beys, setBeys] = useState<Bey[]>([]);
+  const [selectedComboCount, setSelectedComboCount] = useState<number>(0);
 
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [selectedTournament, setSelectedTournament] = useState<string | null>(null);
@@ -118,8 +119,21 @@ export default function TournamentInscriptionPage() {
     setTournamentDetails(details);
 
     if (details) {
-      const initialBeys: Bey[] = Array(details.max_combos).fill(null).map(() => ({ cx: false }));
+      // Reset combo count and beys when tournament changes
+      setSelectedComboCount(0);
+      setBeys([]);
+    }
+  };
+
+  const handleComboCountChange = (count: number) => {
+    setSelectedComboCount(count);
+    
+    if (count > 0) {
+      // Initialize the beys array with empty bey objects
+      const initialBeys: Bey[] = Array(count).fill(null).map(() => ({ cx: false }));
       setBeys(initialBeys);
+    } else {
+      setBeys([]);
     }
   };
 
@@ -151,6 +165,25 @@ export default function TournamentInscriptionPage() {
   const handleSubmit = async () => {
     if (!selectedPlayer || !selectedTournament) {
       alert("Veuillez sélectionner un joueur et un tournoi !");
+      return;
+    }
+
+    if (selectedComboCount === 0) {
+      alert("Veuillez sélectionner le nombre de combos !");
+      return;
+    }
+
+    // Check if all required pieces are selected for each bey
+    const incompleteBeys = beys.some((bey, index) => {
+      if (bey.cx) {
+        return !bey.lockChip || !bey.blade || !bey.assist || !bey.ratchet || !bey.bit;
+      } else {
+        return !bey.blade || !bey.ratchet || !bey.bit;
+      }
+    });
+
+    if (incompleteBeys) {
+      alert("Veuillez sélectionner toutes les pièces requises pour chaque combo !");
       return;
     }
 
@@ -201,6 +234,13 @@ export default function TournamentInscriptionPage() {
       if (participantError) throw participantError;
 
       alert("Inscription réussie !");
+      
+      // Reset form
+      setSelectedPlayer(null);
+      setSelectedTournament(null);
+      setTournamentDetails(null);
+      setSelectedComboCount(0);
+      setBeys([]);
     } catch (err: unknown) {
       if (err instanceof Error) {
         console.error(err.message);
@@ -211,6 +251,11 @@ export default function TournamentInscriptionPage() {
       }
     }
   };
+
+  // Generate combo count options based on tournament max_combos
+  const comboCountOptions = tournamentDetails 
+    ? Array.from({ length: tournamentDetails.max_combos }, (_, i) => i + 1)
+    : [];
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white rounded-2xl shadow-2xl">
@@ -244,6 +289,33 @@ export default function TournamentInscriptionPage() {
           <p><span className="font-bold text-blue-300">🏆 Nom :</span> {tournamentDetails.name}</p>
           <p><span className="font-bold text-blue-300">📍 Lieu :</span> {tournamentDetails.location || "Non spécifié"}</p>
           <p><span className="font-bold text-blue-300">📅 Date :</span> {new Date(tournamentDetails.date).toLocaleDateString()}</p>
+          <p><span className="font-bold text-blue-300">🔢 Combos maximum :</span> {tournamentDetails.max_combos}</p>
+        </div>
+      )}
+
+      {/* Sélection du nombre de combos */}
+      {tournamentDetails && (
+        <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-yellow-500 shadow-lg">
+          <label className="block mb-3 font-semibold text-yellow-300">🔢 Nombre de combos :</label>
+          <Select 
+            onValueChange={(value) => handleComboCountChange(parseInt(value))} 
+            value={selectedComboCount.toString()}
+          >
+            <SelectTrigger className="bg-gray-900 border border-yellow-600">
+              <SelectValue placeholder="Choisir le nombre de combos" />
+            </SelectTrigger>
+            <SelectContent className="bg-gray-900 text-white">
+              <SelectItem value="0">Sélectionner...</SelectItem>
+              {comboCountOptions.map(count => (
+                <SelectItem key={count} value={count.toString()}>
+                  {count} combo{count > 1 ? 's' : ''}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="mt-2 text-sm text-yellow-200">
+            Choisissez entre 1 et {tournamentDetails.max_combos} combo(s) pour ce tournoi
+          </p>
         </div>
       )}
 
@@ -264,13 +336,13 @@ export default function TournamentInscriptionPage() {
         </Select>
       </div>
 
-      {/* Beys */}
-      {beys.map((bey, index) => (
+      {/* Beys - Only show if combo count is selected */}
+      {selectedComboCount > 0 && beys.map((bey, index) => (
         <div
           key={`bey-${index}`}
           className="mb-8 p-6 rounded-xl bg-gradient-to-r from-gray-700 to-gray-800 border border-pink-500 shadow-xl"
         >
-          <p className="text-lg font-bold mb-4 text-pink-300">🔥 Bey {index + 1}</p>
+          <p className="text-lg font-bold mb-4 text-pink-300">🔥 Combo {index + 1}</p>
           <div className="mb-4 flex items-center gap-2">
             <label className="font-semibold">CX ?</label>
             <input
@@ -332,8 +404,8 @@ export default function TournamentInscriptionPage() {
 
       <Button
         onClick={handleSubmit}
-        disabled={!selectedTournament}
-        className="w-full py-3 text-lg font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg transition-all duration-200"
+        disabled={!selectedTournament || !selectedPlayer || selectedComboCount === 0}
+        className="w-full py-3 text-lg font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg transition-all duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed"
       >
         ⚡ S&apos;inscrire maintenant
       </Button>
