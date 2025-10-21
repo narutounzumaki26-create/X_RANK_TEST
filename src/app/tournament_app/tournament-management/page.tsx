@@ -182,10 +182,28 @@ export default function TournamentManagementPage() {
 
   const getComboName = useCallback(
     (comboId: string | null) => {
-      if (!comboId) return 'Combo inconnu'
-      const combo = combosList.find((c) => c.combo_id === comboId)
-      if (!combo) return 'Combo inconnu'
-      return combo.name
+      if (!comboId) return 'Combo inconnu';
+      
+      const combo = combosList.find((c) => c.combo_id === comboId);
+      
+      if (!combo) {
+        console.warn('Combo not found for ID:', comboId);
+        return 'Combo inconnu';
+      }
+      
+      // Extraire seulement le nom sans l'UUID supplémentaire
+      const comboName = combo.name || '';
+      
+      // Si le nom contient " - " et un UUID, on garde seulement la partie avant le UUID
+      if (comboName.includes(' - ') && comboName.length > 36) {
+        const parts = comboName.split(' - ');
+        // Garder seulement "Combo X" et ignorer l'UUID
+        if (parts.length >= 2) {
+          return parts[0]; // Retourne "Combo 1", "Combo 2", etc.
+        }
+      }
+      
+      return comboName || 'Combo sans nom';
     },
     [combosList]
   )
