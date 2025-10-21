@@ -12,7 +12,6 @@ import {
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
 import { MainMenuButton } from "@/components/navigation/MainMenuButton";
-import { useToast } from "@/components/ui/use-toast";
 
 interface Player {
   player_id: string;
