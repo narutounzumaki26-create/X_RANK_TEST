@@ -26,6 +26,21 @@ interface Tournament {
   max_combos: number;
 }
 
+interface Combo {
+  combo_id: string;
+  name: string;
+  blade_id: string;
+  bit_id: string;
+  ratchet_id: string;
+  assist_id: string | null;
+  lock_chip_id: string | null;
+  blade?: { name: string; type?: string };
+  bit?: { name: string; type?: string };
+  ratchet?: { name: string; type?: string };
+  assist?: { name: string; type?: string };
+  lock_chip?: { name: string; type?: string };
+}
+
 type BeyPieceKey = "blade" | "bit" | "ratchet" | "assist" | "lockChip";
 
 type Bey = {
@@ -40,6 +55,8 @@ type Bey = {
   assistType?: string;
   lockChip?: string;
   lockChipType?: string;
+  isExistingCombo?: boolean;
+  existingComboId?: string;
 };
 
 export default function TournamentInscriptionPage() {
@@ -66,6 +83,7 @@ export default function TournamentInscriptionPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [beys, setBeys] = useState<Bey[]>([]);
   const [selectedComboCount, setSelectedComboCount] = useState<number>(0);
+  const [existingCombos, setExistingCombos] = useState<Combo[]>([]);
 
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [selectedTournament, setSelectedTournament] = useState<string | null>(null);
@@ -113,6 +131,36 @@ export default function TournamentInscriptionPage() {
     fetchPieces();
   }, []);
 
+  // Fetch existing combos when player is selected
+  useEffect(() => {
+    const fetchExistingCombos = async () => {
+      if (!selectedPlayer) {
+        setExistingCombos([]);
+        return;
+      }
+
+      const { data, error } = await supabase
+        .from("combos")
+        .select(`
+          *,
+          blade:blade_id(name, type),
+          bit:bit_id(name, type),
+          ratchet:ratchet_id(name, type),
+          assist:assist_id(name, type),
+          lock_chip:lock_chip_id(name, type)
+        `)
+        .eq("player_id", selectedPlayer);
+
+      if (error) {
+        console.error("Error fetching combos:", error);
+      } else if (data) {
+        setExistingCombos(data);
+      }
+    };
+
+    fetchExistingCombos();
+  }, [selectedPlayer]);
+
   const handleTournamentSelect = (tournamentId: string) => {
     setSelectedTournament(tournamentId);
     const details = tournaments.find((t) => t.tournament_id === tournamentId) || null;
@@ -130,7 +178,10 @@ export default function TournamentInscriptionPage() {
     
     if (count > 0) {
       // Initialize the beys array with empty bey objects
-      const initialBeys: Bey[] = Array(count).fill(null).map(() => ({ cx: false }));
+      const initialBeys: Bey[] = Array(count).fill(null).map(() => ({ 
+        cx: false,
+        isExistingCombo: false 
+      }));
       setBeys(initialBeys);
     } else {
       setBeys([]);
@@ -140,6 +191,11 @@ export default function TournamentInscriptionPage() {
   const handleBeyCxChange = (index: number, value: boolean) => {
     setBeys(prev => {
       const newBeys = [...prev];
+      // If changing from existing combo to new, clear the existing combo data
+      if (newBeys[index].isExistingCombo && !value === newBeys[index].cx) {
+        newBeys[index].isExistingCombo = false;
+        newBeys[index].existingComboId = undefined;
+      }
       newBeys[index].cx = value;
       return newBeys;
     });
@@ -152,6 +208,12 @@ export default function TournamentInscriptionPage() {
     pieceType?: string
   ) => {
     const newBeys = [...beys];
+    // If modifying a piece, it's no longer an existing combo
+    if (newBeys[index].isExistingCombo) {
+      newBeys[index].isExistingCombo = false;
+      newBeys[index].existingComboId = undefined;
+    }
+    
     (newBeys[index][type] as string) = value;
 
     if (pieceType) {
@@ -160,6 +222,36 @@ export default function TournamentInscriptionPage() {
     }
 
     setBeys(newBeys);
+  };
+
+  const handleExistingComboSelect = (index: number, comboId: string) => {
+    if (!comboId) {
+      // Reset to empty bey
+      setBeys(prev => {
+        const newBeys = [...prev];
+        newBeys[index] = { cx: false, isExistingCombo: false };
+        return newBeys;
+      });
+      return;
+    }
+
+    const combo = existingCombos.find(c => c.combo_id === comboId);
+    if (!combo) return;
+
+    setBeys(prev => {
+      const newBeys = [...prev];
+      newBeys[index] = {
+        cx: !!combo.lock_chip_id, // CX if has lock chip
+        blade: combo.blade_id,
+        bit: combo.bit_id,
+        ratchet: combo.ratchet_id,
+        assist: combo.assist_id || undefined,
+        lockChip: combo.lock_chip_id || undefined,
+        isExistingCombo: true,
+        existingComboId: combo.combo_id
+      };
+      return newBeys;
+    });
   };
 
   const handleSubmit = async () => {
@@ -175,6 +267,10 @@ export default function TournamentInscriptionPage() {
 
     // Check if all required pieces are selected for each bey
     const incompleteBeys = beys.some((bey, index) => {
+      if (bey.isExistingCombo) {
+        // Existing combos are already complete
+        return false;
+      }
       if (bey.cx) {
         return !bey.lockChip || !bey.blade || !bey.assist || !bey.ratchet || !bey.bit;
       } else {
@@ -192,20 +288,28 @@ export default function TournamentInscriptionPage() {
 
       for (let i = 0; i < beys.length; i++) {
         const bey = beys[i];
-        const { data: combo, error: comboError } = await supabase
-          .from("combos")
-          .insert({
-            blade_id: bey.blade,
-            ratchet_id: bey.ratchet,
-            bit_id: bey.bit,
-            assist_id: bey.assist || null,
-            lock_chip_id: bey.lockChip || null,
-            name: `Combo ${i + 1} - ${selectedPlayer}`,
-          })
-          .select()
-          .single();
-        if (comboError) throw comboError;
-        comboIds.push(combo.combo_id);
+        
+        if (bey.isExistingCombo && bey.existingComboId) {
+          // Use existing combo
+          comboIds.push(bey.existingComboId);
+        } else {
+          // Create new combo
+          const { data: combo, error: comboError } = await supabase
+            .from("combos")
+            .insert({
+              player_id: selectedPlayer,
+              blade_id: bey.blade,
+              ratchet_id: bey.ratchet,
+              bit_id: bey.bit,
+              assist_id: bey.assist || null,
+              lock_chip_id: bey.lockChip || null,
+              name: `Combo ${i + 1} - ${players.find(p => p.player_id === selectedPlayer)?.player_name}`,
+            })
+            .select()
+            .single();
+          if (comboError) throw comboError;
+          comboIds.push(combo.combo_id);
+        }
       }
 
       const deckInsert: Record<string, string> = {
@@ -241,6 +345,7 @@ export default function TournamentInscriptionPage() {
       setTournamentDetails(null);
       setSelectedComboCount(0);
       setBeys([]);
+      setExistingCombos([]);
     } catch (err: unknown) {
       if (err instanceof Error) {
         console.error(err.message);
@@ -256,6 +361,14 @@ export default function TournamentInscriptionPage() {
   const comboCountOptions = tournamentDetails 
     ? Array.from({ length: tournamentDetails.max_combos }, (_, i) => i + 1)
     : [];
+
+  const getComboDisplayName = (combo: Combo) => {
+    const bladeName = combo.blade?.name || 'Unknown Blade';
+    const ratchetName = combo.ratchet?.name || 'Unknown Ratchet';
+    const bitName = combo.bit?.name || 'Unknown Bit';
+    const type = combo.lock_chip_id ? 'CX' : 'Standard';
+    return `${combo.name} (${bladeName} | ${ratchetName} | ${bitName}) - ${type}`;
+  };
 
   return (
     <div className="max-w-4xl mx-auto p-6 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white rounded-2xl shadow-2xl">
@@ -293,8 +406,25 @@ export default function TournamentInscriptionPage() {
         </div>
       )}
 
+      {/* Sélection joueur */}
+      <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-green-500 shadow-lg">
+        <label className="block mb-3 font-semibold text-green-300">👤 Joueur :</label>
+        <Select onValueChange={setSelectedPlayer} value={selectedPlayer || undefined} disabled={!selectedTournament}>
+          <SelectTrigger className="bg-gray-900 border border-green-600">
+            <SelectValue placeholder="Choisir un joueur" />
+          </SelectTrigger>
+          <SelectContent className="bg-gray-900 text-white">
+            {players.map(p => (
+              <SelectItem key={p.player_id} value={p.player_id}>
+                {p.player_name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+
       {/* Sélection du nombre de combos */}
-      {tournamentDetails && (
+      {tournamentDetails && selectedPlayer && (
         <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-yellow-500 shadow-lg">
           <label className="block mb-3 font-semibold text-yellow-300">🔢 Nombre de combos :</label>
           <Select 
@@ -319,23 +449,6 @@ export default function TournamentInscriptionPage() {
         </div>
       )}
 
-      {/* Sélection joueur */}
-      <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-green-500 shadow-lg">
-        <label className="block mb-3 font-semibold text-green-300">👤 Joueur :</label>
-        <Select onValueChange={setSelectedPlayer} value={selectedPlayer || undefined} disabled={!selectedTournament}>
-          <SelectTrigger className="bg-gray-900 border border-green-600">
-            <SelectValue placeholder="Choisir un joueur" />
-          </SelectTrigger>
-          <SelectContent className="bg-gray-900 text-white">
-            {players.map(p => (
-              <SelectItem key={p.player_id} value={p.player_id}>
-                {p.player_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       {/* Beys - Only show if combo count is selected */}
       {selectedComboCount > 0 && beys.map((bey, index) => (
         <div
@@ -343,62 +456,109 @@ export default function TournamentInscriptionPage() {
           className="mb-8 p-6 rounded-xl bg-gradient-to-r from-gray-700 to-gray-800 border border-pink-500 shadow-xl"
         >
           <p className="text-lg font-bold mb-4 text-pink-300">🔥 Combo {index + 1}</p>
-          <div className="mb-4 flex items-center gap-2">
-            <label className="font-semibold">CX ?</label>
-            <input
-              type="checkbox"
-              checked={bey.cx}
-              onChange={e => handleBeyCxChange(index, e.target.checked)}
-              className="w-5 h-5 accent-pink-500"
-            />
-          </div>
 
-          <div className="grid grid-cols-1 gap-3">
-            {(bey.cx
-              ? [
-                  { key: "lockChip", options: lockChips, label: "Lock Chip" },
-                  { key: "blade", options: blades, label: "Blade" },
-                  { key: "assist", options: assists, label: "Assist" },
-                  { key: "ratchet", options: ratchets, label: "Ratchet" },
-                  { key: "bit", options: bits, label: "Bit" },
-                ]
-              : [
-                  { key: "blade", options: blades, label: "Blade" },
-                  { key: "ratchet", options: ratchets, label: "Ratchet" },
-                  { key: "bit", options: bits, label: "Bit" },
-                ]
-            ).map(({ key, options, label }) => {
-              const pieceKey = key as BeyPieceKey;
-              const selectedValue = bey[pieceKey] ?? "";
+          {/* Sélection de combo existant */}
+          {existingCombos.length > 0 && (
+            <div className="mb-6 p-4 bg-gray-800/50 rounded-lg border border-cyan-500">
+              <label className="block mb-2 font-semibold text-cyan-300">
+                🎯 Utiliser un combo existant :
+              </label>
+              <Select 
+                onValueChange={(value) => handleExistingComboSelect(index, value)}
+                value={bey.isExistingCombo ? bey.existingComboId : ""}
+              >
+                <SelectTrigger className="bg-gray-900 border border-cyan-600">
+                  <SelectValue placeholder="Choisir un combo existant (optionnel)" />
+                </SelectTrigger>
+                <SelectContent className="bg-gray-900 text-white">
+                  <SelectItem value="">Créer un nouveau combo</SelectItem>
+                  {existingCombos.map(combo => (
+                    <SelectItem key={combo.combo_id} value={combo.combo_id}>
+                      {getComboDisplayName(combo)}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="mt-2 text-sm text-cyan-200">
+                {bey.isExistingCombo 
+                  ? "✓ Combo existant sélectionné - Les pièces seront pré-remplies"
+                  : "Laisser vide pour créer un nouveau combo"
+                }
+              </p>
+            </div>
+          )}
 
-              return (
-                <Select
-                  key={pieceKey}
-                  onValueChange={v => handleBeyPieceSelect(index, pieceKey, v)}
-                  value={selectedValue}
-                >
-                  <SelectTrigger className="bg-gray-900 border border-pink-600">
-                    <SelectValue placeholder={label} />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-900 text-white">
-                    {options.map(o => {
-                      // 🔥 Fixed mapping for Lock Chip
-                      const idKey =
-                        pieceKey === "lockChip"
-                          ? "lock_chip_id"
-                          : `${pieceKey}_id`;
-                      const optionValue = o[idKey as keyof typeof o] as string;
-                      return (
-                        <SelectItem key={optionValue} value={optionValue}>
-                          {o.name} {o.type ? `(${o.type})` : ""}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              );
-            })}
-          </div>
+          {/* Affichage conditionnel des pièces - seulement si pas de combo existant ou en modification */}
+          {(!bey.isExistingCombo || (bey.isExistingCombo && Object.keys(bey).some(key => !['cx', 'isExistingCombo', 'existingComboId'].includes(key)))) && (
+            <>
+              <div className="mb-4 flex items-center gap-2">
+                <label className="font-semibold">CX ?</label>
+                <input
+                  type="checkbox"
+                  checked={bey.cx}
+                  onChange={e => handleBeyCxChange(index, e.target.checked)}
+                  className="w-5 h-5 accent-pink-500"
+                  disabled={bey.isExistingCombo}
+                />
+                {bey.isExistingCombo && (
+                  <span className="text-sm text-cyan-300">(Défini par le combo existant)</span>
+                )}
+              </div>
+
+              <div className="grid grid-cols-1 gap-3">
+                {(bey.cx
+                  ? [
+                      { key: "lockChip", options: lockChips, label: "Lock Chip" },
+                      { key: "blade", options: blades, label: "Blade" },
+                      { key: "assist", options: assists, label: "Assist" },
+                      { key: "ratchet", options: ratchets, label: "Ratchet" },
+                      { key: "bit", options: bits, label: "Bit" },
+                    ]
+                  : [
+                      { key: "blade", options: blades, label: "Blade" },
+                      { key: "ratchet", options: ratchets, label: "Ratchet" },
+                      { key: "bit", options: bits, label: "Bit" },
+                    ]
+                ).map(({ key, options, label }) => {
+                  const pieceKey = key as BeyPieceKey;
+                  const selectedValue = bey[pieceKey] ?? "";
+
+                  return (
+                    <Select
+                      key={pieceKey}
+                      onValueChange={v => handleBeyPieceSelect(index, pieceKey, v)}
+                      value={selectedValue}
+                      disabled={bey.isExistingCombo}
+                    >
+                      <SelectTrigger className={`bg-gray-900 border ${bey.isExistingCombo ? 'border-cyan-600' : 'border-pink-600'}`}>
+                        <SelectValue placeholder={label} />
+                      </SelectTrigger>
+                      <SelectContent className="bg-gray-900 text-white">
+                        {options.map(o => {
+                          const idKey =
+                            pieceKey === "lockChip"
+                              ? "lock_chip_id"
+                              : `${pieceKey}_id`;
+                          const optionValue = o[idKey as keyof typeof o] as string;
+                          return (
+                            <SelectItem key={optionValue} value={optionValue}>
+                              {o.name} {o.type ? `(${o.type})` : ""}
+                            </SelectItem>
+                          );
+                        })}
+                      </SelectContent>
+                    </Select>
+                  );
+                })}
+              </div>
+
+              {bey.isExistingCombo && (
+                <p className="mt-3 text-sm text-cyan-300">
+                  ⚠️ Modifier une pièce convertira ce combo en nouveau combo
+                </p>
+              )}
+            </>
+          )}
         </div>
       ))}
 
