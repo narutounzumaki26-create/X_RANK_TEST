@@ -362,14 +362,28 @@ export default function TournamentInscriptionPage() {
     ? Array.from({ length: tournamentDetails.max_combos }, (_, i) => i + 1)
     : [];
 
-  const getComboDisplayName = (combo: Combo) => {
-    const bladeName = combo.blade?.name || 'Unknown Blade';
-    const ratchetName = combo.ratchet?.name || 'Unknown Ratchet';
-    const bitName = combo.bit?.name || 'Unknown Bit';
-    const type = combo.lock_chip_id ? 'CX' : 'Standard';
-    return `${combo.name} (${bladeName} | ${ratchetName} | ${bitName}) - ${type}`;
-  };
-
+const getComboDisplayName = (combo: Combo) => {
+  // If the combo has a meaningful custom name (not the default pattern), use it
+  if (combo.name && !combo.name.startsWith('Combo ') && !combo.name.includes(' - ')) {
+    return combo.name;
+  }
+  
+  // Otherwise, build a descriptive name from the pieces
+  const bladeName = combo.blade?.name || 'Unknown Blade';
+  const ratchetName = combo.ratchet?.name || 'Unknown Ratchet';
+  const bitName = combo.bit?.name || 'Unknown Bit';
+  
+  let displayName = `${bladeName} | ${ratchetName} | ${bitName}`;
+  
+  // Add CX parts if present
+  if (combo.lock_chip) {
+    const lockChipName = combo.lock_chip?.name || 'Unknown Lock';
+    const assistName = combo.assist?.name || 'Unknown Assist';
+    displayName = `[CX] ${lockChipName} | ${bladeName} | ${assistName} | ${ratchetName} | ${bitName}`;
+  }
+  
+  return displayName;
+};
   return (
     <div className="max-w-4xl mx-auto p-6 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white rounded-2xl shadow-2xl">
       <div className="mb-6 flex justify-end">
