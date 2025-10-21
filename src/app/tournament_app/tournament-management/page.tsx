@@ -93,12 +93,20 @@ export default function TournamentManagementPage() {
     fetchTournaments()
   }, [])
 
-  // --- Combos ---
+  // --- Combos avec les noms ---
   useEffect(() => {
     const fetchCombos = async () => {
-      const { data, error } = await supabase.from('combos').select('*').returns<combos[]>()
-      if (error) console.error(error)
-      else setCombosList(data || [])
+      const { data, error } = await supabase
+        .from('combos')
+        .select('*')
+        .returns<combos[]>()
+      
+      if (error) {
+        console.error('Error fetching combos:', error)
+      } else {
+        console.log('Combos fetched:', data) // Debug log
+        setCombosList(data || [])
+      }
     }
     fetchCombos()
   }, [])
@@ -137,11 +145,12 @@ export default function TournamentManagementPage() {
   }, [selectedTournament])
 
   // ======================================================
-  // 🧩 Fetch Decks
+  // 🧩 Fetch Decks avec les détails des combos
   // ======================================================
   const fetchPlayerDeck = useCallback(
     async (playerId: string, setDeck: (d: tournament_decks | null) => void) => {
       if (!selectedTournament || !playerId) return
+      
       const { data, error } = await supabase
         .from('tournament_decks')
         .select('*')
@@ -149,8 +158,13 @@ export default function TournamentManagementPage() {
         .eq('player_id', playerId)
         .single<tournament_decks>()
 
-      if (error) setDeck(null)
-      else setDeck(data)
+      if (error) {
+        console.error('Error fetching deck:', error)
+        setDeck(null)
+      } else {
+        console.log('Deck fetched:', data) // Debug log
+        setDeck(data)
+      }
     },
     [selectedTournament]
   )
@@ -184,8 +198,21 @@ export default function TournamentManagementPage() {
     (comboId: string | null) => {
       if (!comboId) return 'Combo inconnu'
       const combo = combosList.find((c) => c.combo_id === comboId)
+      console.log('Looking for combo:', comboId, 'Found:', combo) // Debug log
       if (!combo) return 'Combo inconnu'
-      return combo.name
+      return combo.name || 'Combo sans nom'
+    },
+    [combosList]
+  )
+
+  const getComboDisplayName = useCallback(
+    (comboId: string | null) => {
+      if (!comboId) return 'Combo inconnu'
+      const combo = combosList.find((c) => c.combo_id === comboId)
+      if (!combo) return 'Combo inconnu'
+      
+      // Return just the name for now - you can enhance this with piece details later
+      return combo.name || `Combo ${comboId.slice(0, 8)}...`
     },
     [combosList]
   )
@@ -339,29 +366,30 @@ export default function TournamentManagementPage() {
       {/* Sélection joueurs */}
       {selectedTournament && (
         <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-green-500 shadow-lg flex gap-4">
-          {[{ label: 'Joueur 1', value: selectedPlayer1, set: setSelectedPlayer1 }, { label: 'Joueur 2', value: selectedPlayer2, set: setSelectedPlayer2 }].map(
-            (p, i) => (
-              <div key={i} className="flex-1">
-                <label className="block mb-3 font-semibold text-green-300">{p.label}</label>
-                <select
-                  className="bg-gray-900 border border-green-600 rounded-lg p-3 w-full text-white"
-                  value={p.value}
-                  onChange={(e) => {
-                    p.set(e.target.value)
-                    if (i === 0) setSelectedCombo1('')
-                    else setSelectedCombo2('')
-                  }}
-                >
-                  <option value="">Sélectionnez un joueur</option>
-                  {participants.map((pl) => (
-                    <option key={pl.player_id} value={pl.player_id}>
-                      {pl.player_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )
-          )}
+          {[
+            { label: 'Joueur 1', value: selectedPlayer1, set: setSelectedPlayer1 }, 
+            { label: 'Joueur 2', value: selectedPlayer2, set: setSelectedPlayer2 }
+          ].map((p, i) => (
+            <div key={i} className="flex-1">
+              <label className="block mb-3 font-semibold text-green-300">{p.label}</label>
+              <select
+                className="bg-gray-900 border border-green-600 rounded-lg p-3 w-full text-white"
+                value={p.value}
+                onChange={(e) => {
+                  p.set(e.target.value)
+                  if (i === 0) setSelectedCombo1('')
+                  else setSelectedCombo2('')
+                }}
+              >
+                <option value="">Sélectionnez un joueur</option>
+                {participants.map((pl) => (
+                  <option key={pl.player_id} value={pl.player_id}>
+                    {pl.player_name}
+                  </option>
+                ))}
+              </select>
+            </div>
+          ))}
         </div>
       )}
 
@@ -370,6 +398,7 @@ export default function TournamentManagementPage() {
         {[1, 2].map((num) => {
           const playerDeck = num === 1 ? player1Deck : player2Deck
           const setCombo = num === 1 ? setSelectedCombo1 : setSelectedCombo2
+          const selectedCombo = num === 1 ? selectedCombo1 : selectedCombo2
           const score = num === 1 ? player1Score : player2Score
           const name = num === 1 ? player1Name : player2Name
 
@@ -380,22 +409,23 @@ export default function TournamentManagementPage() {
             >
               <h2 className="font-bold mb-4 text-pink-300">Combos de {name}</h2>
               {playerDeck ? (
-                [playerDeck.combo_id_1, playerDeck.combo_id_2, playerDeck.combo_id_3].map(
-                  (cid, idx) =>
-                    cid && (
-                      <label key={cid} className="block mb-2">
-                        <input
-                          type="radio"
-                          name={`combo${num}`}
-                          value={cid}
-                          checked={(num === 1 ? selectedCombo1 : selectedCombo2) === cid}
-                          onChange={() => setCombo(cid)}
-                          className="mr-2"
-                        />
-                        Combo {idx + 1} - {getComboName(cid)}
-                      </label>
-                    )
-                )
+                [playerDeck.combo_id_1, playerDeck.combo_id_2, playerDeck.combo_id_3]
+                  .filter((cid): cid is string => !!cid) // Filter out null/undefined
+                  .map((cid, idx) => (
+                    <label key={cid} className="block mb-2 p-2 hover:bg-gray-700 rounded cursor-pointer">
+                      <input
+                        type="radio"
+                        name={`combo${num}`}
+                        value={cid}
+                        checked={selectedCombo === cid}
+                        onChange={() => setCombo(cid)}
+                        className="mr-2"
+                      />
+                      <span className="font-medium">
+                        Combo {idx + 1} - {getComboDisplayName(cid)}
+                      </span>
+                    </label>
+                  ))
               ) : (
                 <p className="text-gray-400">Pas de deck sélectionné</p>
               )}
@@ -404,8 +434,8 @@ export default function TournamentManagementPage() {
                 {['Spin', 'Over', 'Burst', 'Xtreme'].map((action) => (
                   <button
                     key={action}
-                    className={`${playerColors[num as 1 | 2]} text-white py-3 rounded-xl w-full text-lg`}
-                    disabled={!(num === 1 ? selectedCombo1 : selectedCombo2)}
+                    className={`${playerColors[num as 1 | 2]} text-white py-3 rounded-xl w-full text-lg disabled:opacity-50 disabled:cursor-not-allowed`}
+                    disabled={!selectedCombo}
                     onClick={() =>
                       handleScore(
                         num as 1 | 2,
@@ -418,7 +448,7 @@ export default function TournamentManagementPage() {
                   </button>
                 ))}
               </div>
-              <p className="mt-2 font-semibold">Score : {score}</p>
+              <p className="mt-2 font-semibold text-lg">Score : {score}</p>
             </div>
           )
         })}
@@ -427,13 +457,17 @@ export default function TournamentManagementPage() {
       {/* Historique */}
       {roundLogs.length > 0 && (
         <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-blue-500 shadow-md">
-          <h3 className="font-semibold text-blue-300 mb-2">Historique des tours :</h3>
-          <ul className="list-disc ml-5 text-white">
+          <h3 className="font-semibold text-blue-300 mb-4 text-lg">Historique des tours :</h3>
+          <ul className="space-y-2">
             {roundLogs.map((log, idx) => (
-              <li key={idx}>
-                Tour {log.round} : {log.player === 1 ? player1Name : player2Name} ({log.action},{' '}
-                +{log.points}) avec <strong>{getComboName(log.winnerCombo)}</strong> contre{' '}
-                <strong>{getComboName(log.loserCombo)}</strong>
+              <li key={idx} className="bg-gray-900/50 p-3 rounded-lg">
+                <span className="font-semibold">Tour {log.round}</span> : 
+                <span className={`ml-2 ${log.player === 1 ? 'text-blue-400' : 'text-red-400'}`}>
+                  {log.player === 1 ? player1Name : player2Name}
+                </span>{' '}
+                ({log.action}, +{log.points}) avec{' '}
+                <strong className="text-yellow-300">{getComboName(log.winnerCombo)}</strong> contre{' '}
+                <strong className="text-yellow-300">{getComboName(log.loserCombo)}</strong>
               </li>
             ))}
           </ul>
@@ -443,26 +477,27 @@ export default function TournamentManagementPage() {
       {/* Validation */}
       {!matchValidated && round > 0 && (
         <button
-          className="w-full py-3 text-lg font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg transition-all duration-200 mb-4"
+          className="w-full py-3 text-lg font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg transition-all duration-200 mb-4 disabled:opacity-50 disabled:cursor-not-allowed"
           onClick={updatePlayerStats}
+          disabled={!selectedCombo1 || !selectedCombo2}
         >
           ✅ Valider le match
         </button>
       )}
 
       {matchValidated && (
-        <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-blue-500 shadow-md">
-          <h2 className="text-xl font-bold mb-2 text-blue-300">Rapport du match</h2>
-          <p>
-            Score final : {player1Name} {player1Score} - {player2Score} {player2Name}
+        <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-green-500 shadow-md">
+          <h2 className="text-xl font-bold mb-4 text-green-300">🎉 Rapport du match</h2>
+          <p className="text-lg mb-2">
+            <span className="font-semibold">Score final :</span> {player1Name} {player1Score} - {player2Score} {player2Name}
           </p>
-          <p>
-            Vainqueur :{' '}
+          <p className="text-lg mb-4">
+            <span className="font-semibold">Vainqueur :</span>{' '}
             {player1Score > player2Score
-              ? player1Name
+              ? <span className="text-blue-400">{player1Name}</span>
               : player2Score > player1Score
-              ? player2Name
-              : 'Égalité'}
+              ? <span className="text-red-400">{player2Name}</span>
+              : <span className="text-yellow-400">Égalité</span>}
           </p>
           <button
             onClick={resetMatch}
