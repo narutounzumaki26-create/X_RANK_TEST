@@ -133,11 +133,12 @@ export default function TournamentInscriptionPage() {
     });
   };
 
-  const handleBeyPieceSelect = (index: number, type: keyof Bey, value: string) => {
-    const newBeys = [...beys];
-    newBeys[index][type] = value;
-    setBeys(newBeys);
-  };
+const handleBeyPieceSelect = (index: number, type: keyof Bey, value: string) => {
+  const newBeys = [...beys];
+  (newBeys[index][type] as string | undefined) = value;
+  setBeys(newBeys);
+};
+
 
   const handleSubmit = async () => {
     if (!selectedPlayer || !selectedTournament) {
