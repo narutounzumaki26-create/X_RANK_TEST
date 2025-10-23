@@ -344,14 +344,15 @@ const handleBeyPieceSelect = (index: number, type: keyof Bey, value: string) => 
                     <SelectValue placeholder={`Choisir un ${label}`} />
                   </SelectTrigger>
                   <SelectContent>
-                    {options.map(opt => (
-                      <SelectItem
-                        key={opt[`${key}_id`]}
-                        value={opt[`${key}_id`]}
-                      >
+                  {options.map(opt => {
+                      const idKey = `${key}_id` as keyof typeof opt;
+                      const idValue = opt[idKey] as string;
+                      return (
+                        <SelectItem key={idValue} value={idValue}>
                         {opt.name}
-                      </SelectItem>
-                    ))}
+                        </SelectItem>
+                       );
+                  })}
                   </SelectContent>
                 </Select>
               </div>
