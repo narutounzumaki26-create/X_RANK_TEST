@@ -105,6 +105,14 @@ export default async function MainMenuPage() {
       shadow: "shadow-[0_0_22px_rgba(255,200,80,0.25)] hover:shadow-[0_0_28px_rgba(255,180,80,0.45)]",
     },
     {
+      href: "/tournament_app/tournaments",
+      label: "Tournois",
+      icon: "🏆",
+      description: "Organise ou consulte les brackets et decks enregistrés.",
+      gradient: "from-sky-500/70 via-blue-600/70 to-indigo-700/60",
+      shadow: "shadow-[0_0_22px_rgba(0,150,255,0.25)] hover:shadow-[0_0_28px_rgba(60,180,255,0.45)]",
+    },
+    {
       href: "/tournament_app/tournament-finished",
       label: "Tournois terminés",
       icon: "🏁",
