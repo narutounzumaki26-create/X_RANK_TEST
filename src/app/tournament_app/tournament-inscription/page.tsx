@@ -66,6 +66,8 @@ export default function TournamentInscriptionPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [beys, setBeys] = useState<Bey[]>([]);
   const [selectedComboCount, setSelectedComboCount] = useState<number>(0);
+  // NEW: State for combo names
+  const [comboNames, setComboNames] = useState<string[]>([]);
 
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [selectedTournament, setSelectedTournament] = useState<string | null>(null);
@@ -119,9 +121,10 @@ export default function TournamentInscriptionPage() {
     setTournamentDetails(details);
 
     if (details) {
-      // Reset combo count and beys when tournament changes
+      // Reset combo count, beys, and names when tournament changes
       setSelectedComboCount(0);
       setBeys([]);
+      setComboNames([]);
     }
   };
 
@@ -129,12 +132,24 @@ export default function TournamentInscriptionPage() {
     setSelectedComboCount(count);
     
     if (count > 0) {
-      // Initialize the beys array with empty bey objects
+      // Initialize the beys array with empty bey objects and empty names
       const initialBeys: Bey[] = Array(count).fill(null).map(() => ({ cx: false }));
+      const initialNames: string[] = Array(count).fill("");
       setBeys(initialBeys);
+      setComboNames(initialNames);
     } else {
       setBeys([]);
+      setComboNames([]);
     }
+  };
+
+  // NEW: Handle combo name change
+  const handleComboNameChange = (index: number, value: string) => {
+    setComboNames(prev => {
+      const newNames = [...prev];
+      newNames[index] = value;
+      return newNames;
+    });
   };
 
   const handleBeyCxChange = (index: number, value: boolean) => {
@@ -173,6 +188,13 @@ export default function TournamentInscriptionPage() {
       return;
     }
 
+    // Check if all combo names are filled
+    const emptyComboNames = comboNames.some(name => !name.trim());
+    if (emptyComboNames) {
+      alert("Veuillez remplir le nom pour chaque combo !");
+      return;
+    }
+
     // Check if all required pieces are selected for each bey
     const incompleteBeys = beys.some((bey, index) => {
       if (bey.cx) {
@@ -192,6 +214,8 @@ export default function TournamentInscriptionPage() {
 
       for (let i = 0; i < beys.length; i++) {
         const bey = beys[i];
+        const comboName = comboNames[i]; // Use the user-provided combo name
+        
         const { data: combo, error: comboError } = await supabase
           .from("combos")
           .insert({
@@ -200,7 +224,7 @@ export default function TournamentInscriptionPage() {
             bit_id: bey.bit,
             assist_id: bey.assist || null,
             lock_chip_id: bey.lockChip || null,
-            name: `Combo ${i + 1} - ${selectedPlayer}`,
+            name: comboName, // Use the actual combo name from input
           })
           .select()
           .single();
@@ -241,6 +265,7 @@ export default function TournamentInscriptionPage() {
       setTournamentDetails(null);
       setSelectedComboCount(0);
       setBeys([]);
+      setComboNames([]);
     } catch (err: unknown) {
       if (err instanceof Error) {
         console.error(err.message);
@@ -342,6 +367,18 @@ export default function TournamentInscriptionPage() {
           key={`bey-${index}`}
           className="mb-8 p-6 rounded-xl bg-gradient-to-r from-gray-700 to-gray-800 border border-pink-500 shadow-xl"
         >
+          {/* NEW: Combo Name Input */}
+          <div className="mb-4">
+            <label className="block mb-2 font-semibold text-pink-300">Nom du Combo :</label>
+            <input
+              type="text"
+              value={comboNames[index] || ""}
+              onChange={(e) => handleComboNameChange(index, e.target.value)}
+              placeholder={`Ex: Combo ${index + 1} - ef23eae3-7ef0-4c96-87cd-902`}
+              className="w-full p-3 bg-gray-900 border border-pink-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500"
+            />
+          </div>
+
           <p className="text-lg font-bold mb-4 text-pink-300">🔥 Combo {index + 1}</p>
           <div className="mb-4 flex items-center gap-2">
             <label className="font-semibold">CX ?</label>
