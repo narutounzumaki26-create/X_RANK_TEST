@@ -66,8 +66,6 @@ export default function TournamentInscriptionPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [beys, setBeys] = useState<Bey[]>([]);
   const [selectedComboCount, setSelectedComboCount] = useState<number>(0);
-  // NEW: State for combo names
-  const [comboNames, setComboNames] = useState<string[]>([]);
 
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [selectedTournament, setSelectedTournament] = useState<string | null>(null);
@@ -121,10 +119,9 @@ export default function TournamentInscriptionPage() {
     setTournamentDetails(details);
 
     if (details) {
-      // Reset combo count, beys, and names when tournament changes
+      // Reset combo count and beys when tournament changes
       setSelectedComboCount(0);
       setBeys([]);
-      setComboNames([]);
     }
   };
 
@@ -132,24 +129,12 @@ export default function TournamentInscriptionPage() {
     setSelectedComboCount(count);
     
     if (count > 0) {
-      // Initialize the beys array with empty bey objects and empty names
+      // Initialize the beys array with empty bey objects
       const initialBeys: Bey[] = Array(count).fill(null).map(() => ({ cx: false }));
-      const initialNames: string[] = Array(count).fill("");
       setBeys(initialBeys);
-      setComboNames(initialNames);
     } else {
       setBeys([]);
-      setComboNames([]);
     }
-  };
-
-  // NEW: Handle combo name change
-  const handleComboNameChange = (index: number, value: string) => {
-    setComboNames(prev => {
-      const newNames = [...prev];
-      newNames[index] = value;
-      return newNames;
-    });
   };
 
   const handleBeyCxChange = (index: number, value: boolean) => {
@@ -177,6 +162,51 @@ export default function TournamentInscriptionPage() {
     setBeys(newBeys);
   };
 
+  // NEW: Function to generate combo name from selected parts
+  const generateComboName = (bey: Bey, index: number): string => {
+    const parts: string[] = [];
+
+    // Get the names of selected parts
+    if (bey.blade) {
+      const blade = blades.find(b => b.blade_id === bey.blade);
+      if (blade) parts.push(blade.name);
+    }
+
+    if (bey.ratchet) {
+      const ratchet = ratchets.find(r => r.ratchet_id === bey.ratchet);
+      if (ratchet) parts.push(ratchet.name);
+    }
+
+    if (bey.bit) {
+      const bit = bits.find(b => b.bit_id === bey.bit);
+      if (bit) parts.push(bit.name);
+    }
+
+    if (bey.cx) {
+      if (bey.assist) {
+        const assist = assists.find(a => a.assist_id === bey.assist);
+        if (assist) parts.push(assist.name);
+      }
+      if (bey.lockChip) {
+        const lockChip = lockChips.find(l => l.lock_chip_id === bey.lockChip);
+        if (lockChip) parts.push(lockChip.name);
+      }
+    }
+
+    // If we have all required parts, create the name
+    if (parts.length > 0) {
+      return `Combo ${index + 1} - ${parts.join('-')}`;
+    }
+
+    // Fallback if no parts selected yet
+    return `Combo ${index + 1}`;
+  };
+
+  // NEW: Function to get current combo name for display
+  const getCurrentComboName = (bey: Bey, index: number): string => {
+    return generateComboName(bey, index);
+  };
+
   const handleSubmit = async () => {
     if (!selectedPlayer || !selectedTournament) {
       alert("Veuillez sélectionner un joueur et un tournoi !");
@@ -185,13 +215,6 @@ export default function TournamentInscriptionPage() {
 
     if (selectedComboCount === 0) {
       alert("Veuillez sélectionner le nombre de combos !");
-      return;
-    }
-
-    // Check if all combo names are filled
-    const emptyComboNames = comboNames.some(name => !name.trim());
-    if (emptyComboNames) {
-      alert("Veuillez remplir le nom pour chaque combo !");
       return;
     }
 
@@ -214,7 +237,7 @@ export default function TournamentInscriptionPage() {
 
       for (let i = 0; i < beys.length; i++) {
         const bey = beys[i];
-        const comboName = comboNames[i]; // Use the user-provided combo name
+        const comboName = generateComboName(bey, i); // Auto-generate the combo name
         
         const { data: combo, error: comboError } = await supabase
           .from("combos")
@@ -224,7 +247,7 @@ export default function TournamentInscriptionPage() {
             bit_id: bey.bit,
             assist_id: bey.assist || null,
             lock_chip_id: bey.lockChip || null,
-            name: comboName, // Use the actual combo name from input
+            name: comboName, // Use the auto-generated combo name
           })
           .select()
           .single();
@@ -265,7 +288,6 @@ export default function TournamentInscriptionPage() {
       setTournamentDetails(null);
       setSelectedComboCount(0);
       setBeys([]);
-      setComboNames([]);
     } catch (err: unknown) {
       if (err instanceof Error) {
         console.error(err.message);
@@ -367,16 +389,10 @@ export default function TournamentInscriptionPage() {
           key={`bey-${index}`}
           className="mb-8 p-6 rounded-xl bg-gradient-to-r from-gray-700 to-gray-800 border border-pink-500 shadow-xl"
         >
-          {/* NEW: Combo Name Input */}
-          <div className="mb-4">
-            <label className="block mb-2 font-semibold text-pink-300">Nom du Combo :</label>
-            <input
-              type="text"
-              value={comboNames[index] || ""}
-              onChange={(e) => handleComboNameChange(index, e.target.value)}
-              placeholder={`Ex: Combo ${index + 1} - ef23eae3-7ef0-4c96-87cd-902`}
-              className="w-full p-3 bg-gray-900 border border-pink-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-pink-500"
-            />
+          {/* NEW: Display auto-generated combo name */}
+          <div className="mb-4 p-3 bg-gray-900 rounded-lg border border-pink-600">
+            <p className="text-sm font-semibold text-pink-300 mb-1">Nom du Combo :</p>
+            <p className="text-white font-mono">{getCurrentComboName(bey, index)}</p>
           </div>
 
           <p className="text-lg font-bold mb-4 text-pink-300">🔥 Combo {index + 1}</p>
