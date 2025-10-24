@@ -16,6 +16,7 @@ import { MainMenuButton } from "@/components/navigation/MainMenuButton";
 interface Player {
   player_id: string;
   player_name: string;
+  user_id: string;
 }
 
 interface Tournament {
@@ -24,6 +25,35 @@ interface Tournament {
   location: string | null;
   date: string;
   max_combos: number;
+}
+
+interface Combo {
+  combo_id: string;
+  name: string;
+  blade_id: string;
+  ratchet_id: string;
+  bit_id: string;
+  assist_id: string | null;
+  lock_chip_id: string | null;
+}
+
+interface TournamentDeck {
+  deck_id: string;
+  player_id: string;
+  tournament_id: string;
+  combo_id_1?: string;
+  combo_id_2?: string;
+  combo_id_3?: string;
+  combo_id_4?: string;
+  combo_id_5?: string;
+}
+
+interface TournamentParticipant {
+  participant_id: string;
+  player_id: string;
+  tournament_id: string;
+  tournament_deck: string;
+  is_validated: boolean;
 }
 
 type BeyPieceKey = "blade" | "bit" | "ratchet" | "assist" | "lockChip";
@@ -40,22 +70,34 @@ type Bey = {
   assistType?: string;
   lockChip?: string;
   lockChipType?: string;
+  existingComboId?: string; // Track if this is an existing combo
 };
 
 export default function TournamentInscriptionPage() {
   const router = useRouter();
-  const [players, setPlayers] = useState<Player[]>([]);
+  const [currentUser, setCurrentUser] = useState<any>(null);
+  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
+  
   useEffect(() => {
     const checkAuth = async () => {
-      const {
-        data: { user },
-      } = await supabase.auth.getUser();
-      const { data: adminData } = await supabase
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+      setCurrentUser(user);
+
+      // Get player data for current user
+      const { data: playerData } = await supabase
         .from("players")
-        .select("Admin")
-        .eq("user_id", user?.id)
+        .select("*")
+        .eq("user_id", user.id)
         .single();
-      if (adminData?.Admin === false) {
+
+      if (playerData) {
+        setCurrentPlayer(playerData);
+      } else {
+        console.error("Player not found for user");
         router.push("/");
       }
     };
@@ -66,8 +108,9 @@ export default function TournamentInscriptionPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>([]);
   const [beys, setBeys] = useState<Bey[]>([]);
   const [selectedComboCount, setSelectedComboCount] = useState<number>(0);
+  const [existingDeck, setExistingDeck] = useState<TournamentDeck | null>(null);
+  const [existingParticipant, setExistingParticipant] = useState<TournamentParticipant | null>(null);
 
-  const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [selectedTournament, setSelectedTournament] = useState<string | null>(null);
   const [tournamentDetails, setTournamentDetails] = useState<Tournament | null>(null);
 
@@ -77,15 +120,6 @@ export default function TournamentInscriptionPage() {
   const [assists, setAssists] = useState<{ assist_id: string; name: string; type?: string }[]>([]);
   const [lockChips, setLockChips] = useState<{ lock_chip_id: string; name: string; type?: string }[]>([]);
   const [ratchets, setRatchets] = useState<{ ratchet_id: string; name: string; type?: string }[]>([]);
-
-  useEffect(() => {
-    const fetchPlayers = async () => {
-      const { data, error } = await supabase.from("players").select("*");
-      if (error) console.error(error);
-      else if (data) setPlayers(data.sort((a, b) => a.player_name.localeCompare(b.player_name)));
-    };
-    fetchPlayers();
-  }, []);
 
   useEffect(() => {
     const fetchTournaments = async () => {
@@ -113,15 +147,82 @@ export default function TournamentInscriptionPage() {
     fetchPieces();
   }, []);
 
-  const handleTournamentSelect = (tournamentId: string) => {
+  const handleTournamentSelect = async (tournamentId: string) => {
     setSelectedTournament(tournamentId);
     const details = tournaments.find((t) => t.tournament_id === tournamentId) || null;
     setTournamentDetails(details);
 
-    if (details) {
-      // Reset combo count and beys when tournament changes
-      setSelectedComboCount(0);
-      setBeys([]);
+    if (details && currentPlayer) {
+      // Check if user is already registered for this tournament
+      const { data: participantData } = await supabase
+        .from("tournament_participants")
+        .select("*")
+        .eq("player_id", currentPlayer.player_id)
+        .eq("tournament_id", tournamentId)
+        .single();
+
+      if (participantData) {
+        setExistingParticipant(participantData);
+        
+        // Fetch existing deck
+        const { data: deckData } = await supabase
+          .from("tournament_decks")
+          .select("*")
+          .eq("deck_id", participantData.tournament_deck)
+          .single();
+
+        if (deckData) {
+          setExistingDeck(deckData);
+          await loadExistingCombos(deckData, details.max_combos);
+        }
+      } else {
+        // Reset for new registration
+        setExistingDeck(null);
+        setExistingParticipant(null);
+        setSelectedComboCount(0);
+        setBeys([]);
+      }
+    }
+  };
+
+  const loadExistingCombos = async (deck: TournamentDeck, maxCombos: number) => {
+    const comboIds = [
+      deck.combo_id_1,
+      deck.combo_id_2,
+      deck.combo_id_3,
+      deck.combo_id_4,
+      deck.combo_id_5,
+    ].filter(Boolean).slice(0, maxCombos) as string[];
+
+    setSelectedComboCount(comboIds.length);
+
+    // Fetch combo details
+    const { data: combosData } = await supabase
+      .from("combos")
+      .select("*")
+      .in("combo_id", comboIds);
+
+    if (combosData) {
+      const existingBeys: Bey[] = combosData.map(combo => {
+        const isCx = !!(combo.assist_id && combo.lock_chip_id);
+        
+        return {
+          cx: isCx,
+          blade: combo.blade_id,
+          ratchet: combo.ratchet_id,
+          bit: combo.bit_id,
+          assist: combo.assist_id || undefined,
+          lockChip: combo.lock_chip_id || undefined,
+          existingComboId: combo.combo_id
+        };
+      });
+
+      // Fill remaining slots with empty beys if needed
+      while (existingBeys.length < maxCombos) {
+        existingBeys.push({ cx: false });
+      }
+
+      setBeys(existingBeys.slice(0, maxCombos));
     }
   };
 
@@ -129,9 +230,18 @@ export default function TournamentInscriptionPage() {
     setSelectedComboCount(count);
     
     if (count > 0) {
-      // Initialize the beys array with empty bey objects
-      const initialBeys: Bey[] = Array(count).fill(null).map(() => ({ cx: false }));
-      setBeys(initialBeys);
+      // Initialize the beys array, preserving existing combos where possible
+      const newBeys: Bey[] = [];
+      for (let i = 0; i < count; i++) {
+        if (i < beys.length && beys[i].existingComboId) {
+          // Keep existing combo
+          newBeys.push(beys[i]);
+        } else {
+          // New empty bey
+          newBeys.push({ cx: false });
+        }
+      }
+      setBeys(newBeys);
     } else {
       setBeys([]);
     }
@@ -140,7 +250,12 @@ export default function TournamentInscriptionPage() {
   const handleBeyCxChange = (index: number, value: boolean) => {
     setBeys(prev => {
       const newBeys = [...prev];
-      newBeys[index].cx = value;
+      newBeys[index] = {
+        ...newBeys[index],
+        cx: value,
+        // Clear CX-specific pieces when switching from CX to non-CX
+        ...(value === false ? { assist: undefined, lockChip: undefined } : {})
+      };
       return newBeys;
     });
   };
@@ -152,17 +267,22 @@ export default function TournamentInscriptionPage() {
     pieceType?: string
   ) => {
     const newBeys = [...beys];
-    (newBeys[index][type] as string) = value;
+    newBeys[index] = {
+      ...newBeys[index],
+      [type]: value,
+      // Remove existingComboId when modifying a piece (becomes a new combo)
+      existingComboId: undefined
+    };
 
     if (pieceType) {
       const typeKey = `${type}Type` as keyof Bey;
-      (newBeys[index][typeKey] as string) = pieceType;
+      newBeys[index][typeKey] = pieceType;
     }
 
     setBeys(newBeys);
   };
 
-  // NEW: Function to generate combo name from selected parts
+  // Function to generate combo name from selected parts
   const generateComboName = (bey: Bey, index: number): string => {
     const parts: string[] = [];
 
@@ -202,14 +322,14 @@ export default function TournamentInscriptionPage() {
     return `Combo ${index + 1}`;
   };
 
-  // NEW: Function to get current combo name for display
+  // Function to get current combo name for display
   const getCurrentComboName = (bey: Bey, index: number): string => {
     return generateComboName(bey, index);
   };
 
   const handleSubmit = async () => {
-    if (!selectedPlayer || !selectedTournament) {
-      alert("Veuillez sélectionner un joueur et un tournoi !");
+    if (!currentPlayer || !selectedTournament) {
+      alert("Erreur d'authentification ou tournoi non sélectionné !");
       return;
     }
 
@@ -219,7 +339,7 @@ export default function TournamentInscriptionPage() {
     }
 
     // Check if all required pieces are selected for each bey
-    const incompleteBeys = beys.some((bey, index) => {
+    const incompleteBeys = beys.slice(0, selectedComboCount).some((bey, index) => {
       if (bey.cx) {
         return !bey.lockChip || !bey.blade || !bey.assist || !bey.ratchet || !bey.bit;
       } else {
@@ -235,59 +355,96 @@ export default function TournamentInscriptionPage() {
     try {
       const comboIds: string[] = [];
 
-      for (let i = 0; i < beys.length; i++) {
+      for (let i = 0; i < selectedComboCount; i++) {
         const bey = beys[i];
-        const comboName = generateComboName(bey, i); // Auto-generate the combo name
         
-        const { data: combo, error: comboError } = await supabase
-          .from("combos")
-          .insert({
-            blade_id: bey.blade,
-            ratchet_id: bey.ratchet,
-            bit_id: bey.bit,
-            assist_id: bey.assist || null,
-            lock_chip_id: bey.lockChip || null,
-            name: comboName, // Use the auto-generated combo name
-          })
-          .select()
-          .single();
-        if (comboError) throw comboError;
-        comboIds.push(combo.combo_id);
+        if (bey.existingComboId) {
+          // Update existing combo
+          const comboName = generateComboName(bey, i);
+          const { error: updateError } = await supabase
+            .from("combos")
+            .update({
+              blade_id: bey.blade,
+              ratchet_id: bey.ratchet,
+              bit_id: bey.bit,
+              assist_id: bey.assist || null,
+              lock_chip_id: bey.lockChip || null,
+              name: comboName,
+            })
+            .eq("combo_id", bey.existingComboId);
+
+          if (updateError) throw updateError;
+          comboIds.push(bey.existingComboId);
+        } else {
+          // Create new combo
+          const comboName = generateComboName(bey, i);
+          const { data: combo, error: comboError } = await supabase
+            .from("combos")
+            .insert({
+              blade_id: bey.blade,
+              ratchet_id: bey.ratchet,
+              bit_id: bey.bit,
+              assist_id: bey.assist || null,
+              lock_chip_id: bey.lockChip || null,
+              name: comboName,
+            })
+            .select()
+            .single();
+          if (comboError) throw comboError;
+          comboIds.push(combo.combo_id);
+        }
       }
 
-      const deckInsert: Record<string, string> = {
-        player_id: selectedPlayer,
-        tournament_id: selectedTournament,
-      };
-      comboIds.forEach((id, idx) => {
-        deckInsert[`combo_id_${idx + 1}`] = id;
-      });
-
-      const { data: deck, error: deckError } = await supabase
-        .from("tournament_decks")
-        .insert(deckInsert)
-        .select()
-        .single();
-      if (deckError) throw deckError;
-
-      const { error: participantError } = await supabase
-        .from("tournament_participants")
-        .insert({
-          player_id: selectedPlayer,
-          tournament_id: selectedTournament,
-          tournament_deck: deck.deck_id,
-          is_validated: false,
+      if (existingDeck) {
+        // Update existing deck
+        const deckUpdate: Record<string, string> = {};
+        comboIds.forEach((id, idx) => {
+          deckUpdate[`combo_id_${idx + 1}`] = id;
         });
-      if (participantError) throw participantError;
 
-      alert("Inscription réussie !");
+        const { error: deckError } = await supabase
+          .from("tournament_decks")
+          .update(deckUpdate)
+          .eq("deck_id", existingDeck.deck_id);
+
+        if (deckError) throw deckError;
+
+        alert("Deck mis à jour avec succès !");
+      } else {
+        // Create new deck and registration
+        const deckInsert: Record<string, string> = {
+          player_id: currentPlayer.player_id,
+          tournament_id: selectedTournament,
+        };
+        comboIds.forEach((id, idx) => {
+          deckInsert[`combo_id_${idx + 1}`] = id;
+        });
+
+        const { data: deck, error: deckError } = await supabase
+          .from("tournament_decks")
+          .insert(deckInsert)
+          .select()
+          .single();
+        if (deckError) throw deckError;
+
+        const { error: participantError } = await supabase
+          .from("tournament_participants")
+          .insert({
+            player_id: currentPlayer.player_id,
+            tournament_id: selectedTournament,
+            tournament_deck: deck.deck_id,
+            is_validated: false,
+          });
+        if (participantError) throw participantError;
+
+        alert("Inscription réussie !");
+      }
+
+      // Refresh data
+      if (selectedTournament) {
+        handleTournamentSelect(selectedTournament);
+      }
       
-      // Reset form
-      setSelectedPlayer(null);
-      setSelectedTournament(null);
-      setTournamentDetails(null);
-      setSelectedComboCount(0);
-      setBeys([]);
     } catch (err: unknown) {
       if (err instanceof Error) {
         console.error(err.message);
@@ -299,14 +456,62 @@ export default function TournamentInscriptionPage() {
     }
   };
 
+  const handleCancelRegistration = async () => {
+    if (!existingParticipant || !existingDeck) return;
+
+    if (confirm("Êtes-vous sûr de vouloir annuler votre inscription à ce tournoi ?")) {
+      try {
+        // Delete participant
+        const { error: participantError } = await supabase
+          .from("tournament_participants")
+          .delete()
+          .eq("participant_id", existingParticipant.participant_id);
+
+        if (participantError) throw participantError;
+
+        // Delete deck
+        const { error: deckError } = await supabase
+          .from("tournament_decks")
+          .delete()
+          .eq("deck_id", existingDeck.deck_id);
+
+        if (deckError) throw deckError;
+
+        alert("Inscription annulée avec succès !");
+        
+        // Reset form
+        setSelectedTournament(null);
+        setTournamentDetails(null);
+        setExistingDeck(null);
+        setExistingParticipant(null);
+        setSelectedComboCount(0);
+        setBeys([]);
+      } catch (err) {
+        console.error(err);
+        alert("Erreur lors de l'annulation.");
+      }
+    }
+  };
+
   // Generate combo count options based on tournament max_combos
   const comboCountOptions = tournamentDetails 
     ? Array.from({ length: tournamentDetails.max_combos }, (_, i) => i + 1)
     : [];
 
+  if (!currentPlayer) {
+    return (
+      <div className="max-w-4xl mx-auto p-6 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white rounded-2xl shadow-2xl">
+        <div className="text-center">Chargement...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-4xl mx-auto p-6 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white rounded-2xl shadow-2xl">
-      <div className="mb-6 flex justify-end">
+      <div className="mb-6 flex justify-between items-center">
+        <div className="text-sm text-gray-300">
+          Connecté en tant que : <span className="font-semibold text-purple-300">{currentPlayer.player_name}</span>
+        </div>
         <MainMenuButton />
       </div>
       <h1 className="text-4xl font-extrabold mb-8 text-center tracking-wide text-purple-400">
@@ -337,6 +542,14 @@ export default function TournamentInscriptionPage() {
           <p><span className="font-bold text-blue-300">📍 Lieu :</span> {tournamentDetails.location || "Non spécifié"}</p>
           <p><span className="font-bold text-blue-300">📅 Date :</span> {new Date(tournamentDetails.date).toLocaleDateString()}</p>
           <p><span className="font-bold text-blue-300">🔢 Combos maximum :</span> {tournamentDetails.max_combos}</p>
+          {existingParticipant && (
+            <div className="mt-3 p-3 bg-yellow-600/20 rounded-lg border border-yellow-500">
+              <p className="text-yellow-300 font-semibold">
+                ✅ Vous êtes déjà inscrit à ce tournoi
+                {existingParticipant.is_validated && " (Validé)"}
+              </p>
+            </div>
+          )}
         </div>
       )}
 
@@ -347,6 +560,7 @@ export default function TournamentInscriptionPage() {
           <Select 
             onValueChange={(value) => handleComboCountChange(parseInt(value))} 
             value={selectedComboCount.toString()}
+            disabled={existingParticipant?.is_validated}
           >
             <SelectTrigger className="bg-gray-900 border border-yellow-600">
               <SelectValue placeholder="Choisir le nombre de combos" />
@@ -362,40 +576,37 @@ export default function TournamentInscriptionPage() {
           </Select>
           <p className="mt-2 text-sm text-yellow-200">
             Choisissez entre 1 et {tournamentDetails.max_combos} combo(s) pour ce tournoi
+            {existingParticipant?.is_validated && (
+              <span className="block text-red-300 mt-1">
+                ⚠️ Votre inscription est validée, vous ne pouvez plus modifier le nombre de combos
+              </span>
+            )}
           </p>
         </div>
       )}
 
-      {/* Sélection joueur */}
-      <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-green-500 shadow-lg">
-        <label className="block mb-3 font-semibold text-green-300">👤 Joueur :</label>
-        <Select onValueChange={setSelectedPlayer} value={selectedPlayer || undefined} disabled={!selectedTournament}>
-          <SelectTrigger className="bg-gray-900 border border-green-600">
-            <SelectValue placeholder="Choisir un joueur" />
-          </SelectTrigger>
-          <SelectContent className="bg-gray-900 text-white">
-            {players.map(p => (
-              <SelectItem key={p.player_id} value={p.player_id}>
-                {p.player_name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
       {/* Beys - Only show if combo count is selected */}
-      {selectedComboCount > 0 && beys.map((bey, index) => (
+      {selectedComboCount > 0 && beys.slice(0, selectedComboCount).map((bey, index) => (
         <div
-          key={`bey-${index}`}
+          key={`bey-${index}-${bey.existingComboId || 'new'}`}
           className="mb-8 p-6 rounded-xl bg-gradient-to-r from-gray-700 to-gray-800 border border-pink-500 shadow-xl"
         >
-          {/* NEW: Display auto-generated combo name */}
+          {/* Display auto-generated combo name */}
           <div className="mb-4 p-3 bg-gray-900 rounded-lg border border-pink-600">
             <p className="text-sm font-semibold text-pink-300 mb-1">Nom du Combo :</p>
             <p className="text-white font-mono">{getCurrentComboName(bey, index)}</p>
+            {bey.existingComboId && (
+              <p className="text-xs text-green-400 mt-1">
+                ✨ Combo existant - Les modifications créeront un nouveau combo
+              </p>
+            )}
           </div>
 
-          <p className="text-lg font-bold mb-4 text-pink-300">🔥 Combo {index + 1}</p>
+          <p className="text-lg font-bold mb-4 text-pink-300">
+            🔥 Combo {index + 1} 
+            {bey.existingComboId && " (Existant)"}
+          </p>
+          
           <div className="mb-4 flex items-center gap-2">
             <label className="font-semibold">CX ?</label>
             <input
@@ -403,6 +614,7 @@ export default function TournamentInscriptionPage() {
               checked={bey.cx}
               onChange={e => handleBeyCxChange(index, e.target.checked)}
               className="w-5 h-5 accent-pink-500"
+              disabled={existingParticipant?.is_validated}
             />
           </div>
 
@@ -429,13 +641,13 @@ export default function TournamentInscriptionPage() {
                   key={pieceKey}
                   onValueChange={v => handleBeyPieceSelect(index, pieceKey, v)}
                   value={selectedValue}
+                  disabled={existingParticipant?.is_validated}
                 >
                   <SelectTrigger className="bg-gray-900 border border-pink-600">
                     <SelectValue placeholder={label} />
                   </SelectTrigger>
                   <SelectContent className="bg-gray-900 text-white">
                     {options.map(o => {
-                      // 🔥 Fixed mapping for Lock Chip
                       const idKey =
                         pieceKey === "lockChip"
                           ? "lock_chip_id"
@@ -455,13 +667,33 @@ export default function TournamentInscriptionPage() {
         </div>
       ))}
 
-      <Button
-        onClick={handleSubmit}
-        disabled={!selectedTournament || !selectedPlayer || selectedComboCount === 0}
-        className="w-full py-3 text-lg font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg transition-all duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed"
-      >
-        ⚡ S&apos;inscrire maintenant
-      </Button>
+      <div className="flex gap-4">
+        {existingParticipant && (
+          <Button
+            onClick={handleCancelRegistration}
+            className="flex-1 py-3 text-lg font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg transition-all duration-200"
+            disabled={existingParticipant?.is_validated}
+          >
+            ❌ Annuler l&apos;inscription
+          </Button>
+        )}
+        
+        <Button
+          onClick={handleSubmit}
+          disabled={!selectedTournament || selectedComboCount === 0 || existingParticipant?.is_validated}
+          className="flex-1 py-3 text-lg font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg transition-all duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed"
+        >
+          {existingParticipant ? "💾 Modifier le Deck" : "⚡ S'inscrire maintenant"}
+        </Button>
+      </div>
+
+      {existingParticipant?.is_validated && (
+        <div className="mt-4 p-4 bg-green-600/20 rounded-lg border border-green-500">
+          <p className="text-green-300 text-center">
+            ✅ Votre inscription est validée et ne peut plus être modifiée
+          </p>
+        </div>
+      )}
     </div>
   );
 }
