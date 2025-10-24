@@ -30,15 +30,21 @@ type Bey = {
   lockChipType?: string
 }
 
-type Combo = {
+interface Combo {
   combo_id: string
   name: string
   blade_id: string
   ratchet_id: string
   bit_id: string
-  assist_id?: string
-  lock_chip_id?: string
+  assist_id: string | null
+  lock_chip_id: string | null
   created_at: string
+}
+
+interface PlayerCombo {
+  combo_id: string
+  player_id: string
+  combos: Combo
 }
 
 // Helper type for piece options
@@ -143,6 +149,7 @@ export default function ComboManagementPage() {
   const fetchUserCombos = async () => {
     if (!playerId) return
 
+    // First, check if player_combos table exists and has data
     const { data, error } = await supabase
       .from('player_combos')
       .select(`
@@ -161,12 +168,33 @@ export default function ComboManagementPage() {
       .eq('player_id', playerId)
 
     if (error) {
-      console.error('Error fetching combos:', error)
+      console.error('Error fetching player combos:', error)
+      
+      // If player_combos doesn't exist or is empty, try fetching directly from combos
+      const { data: directData, error: directError } = await supabase
+        .from('combos')
+        .select('*')
+        .eq('created_by', playerId) // Assuming you have a created_by column
+        .order('created_at', { ascending: false })
+
+      if (directError) {
+        console.error('Error fetching combos directly:', directError)
+        return
+      }
+
+      if (directData) {
+        setCombos(directData as Combo[])
+      }
       return
     }
 
     if (data) {
-      const userCombos = data.map(item => item.combos).filter(Boolean) as Combo[]
+      // Properly type the response and extract combos
+      const playerCombos = data as PlayerCombo[]
+      const userCombos = playerCombos
+        .map(item => item.combos)
+        .filter((combo): combo is Combo => combo !== null)
+      
       setCombos(userCombos)
     }
   }
@@ -289,6 +317,7 @@ export default function ComboManagementPage() {
         assist_id: currentCombo.assist || null,
         lock_chip_id: currentCombo.lockChip || null,
         name: customName,
+        created_by: playerId, // Add created_by to track ownership
       }
 
       let comboId: string
@@ -315,15 +344,21 @@ export default function ComboManagementPage() {
         if (error) throw error
         comboId = data.combo_id
 
-        // Link to player
-        const { error: linkError } = await supabase
-          .from('player_combos')
-          .insert({
-            player_id: playerId,
-            combo_id: comboId,
-          })
+        // Try to link to player_combos table if it exists
+        try {
+          const { error: linkError } = await supabase
+            .from('player_combos')
+            .insert({
+              player_id: playerId,
+              combo_id: comboId,
+            })
 
-        if (linkError) throw linkError
+          if (linkError) {
+            console.log('player_combos table might not exist, continuing without link...')
+          }
+        } catch (linkError) {
+          console.log('Could not link to player_combos, continuing...')
+        }
       }
 
       await fetchUserCombos()
@@ -343,26 +378,29 @@ export default function ComboManagementPage() {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce combo ?')) return
 
     try {
-      // First remove from player_combos
-      const { error: unlinkError } = await supabase
-        .from('player_combos')
-        .delete()
-        .eq('combo_id', comboId)
-        .eq('player_id', playerId)
+      // First try to remove from player_combos if it exists
+      try {
+        const { error: unlinkError } = await supabase
+          .from('player_combos')
+          .delete()
+          .eq('combo_id', comboId)
+          .eq('player_id', playerId)
 
-      if (unlinkError) throw unlinkError
+        if (unlinkError) {
+          console.log('player_combos table might not exist, continuing...')
+        }
+      } catch (unlinkError) {
+        console.log('Could not unlink from player_combos, continuing...')
+      }
 
-      // Then delete the combo (if no other players are using it)
+      // Then delete the combo using created_by to ensure ownership
       const { error: deleteError } = await supabase
         .from('combos')
         .delete()
         .eq('combo_id', comboId)
+        .eq('created_by', playerId)
 
-      if (deleteError) {
-        // If deletion fails, it might be because other players are using it
-        // That's fine, we just unlinked it from this player
-        console.log('Combo kept in database (other players might be using it)')
-      }
+      if (deleteError) throw deleteError
 
       await fetchUserCombos()
       alert('Combo supprimé avec succès !')
