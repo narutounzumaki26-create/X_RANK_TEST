@@ -2,7 +2,6 @@
 import { useRouter } from "next/navigation";
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
-import { User } from "@supabase/supabase-js";
 
 import {
   Select,
@@ -320,7 +319,7 @@ export default function TournamentInscriptionPage() {
 
   const handleSubmit = async () => {
     if (!targetPlayerId || !selectedTournament) {
-      alert("Erreur d'authentification ou tournoi non sélectionné !");
+      alert("Erreur d&apos;authentification ou tournoi non sélectionné !");
       return;
     }
 
@@ -442,7 +441,7 @@ export default function TournamentInscriptionPage() {
         alert(`Erreur : ${err.message}`);
       } else {
         console.error(err);
-        alert("Erreur lors de l'inscription.");
+        alert("Erreur lors de l&apos;inscription.");
       }
     }
   };
@@ -479,7 +478,7 @@ export default function TournamentInscriptionPage() {
         setBeys([]);
       } catch (err) {
         console.error(err);
-        alert("Erreur lors de l'annulation.");
+        alert("Erreur lors de l&apos;annulation.");
       }
     }
   };
@@ -527,7 +526,7 @@ export default function TournamentInscriptionPage() {
             </SelectContent>
           </Select>
           <p className="mt-2 text-sm text-red-200">
-            Mode Admin : Vous pouvez inscrire n'importe quel joueur
+            Mode Admin : Vous pouvez inscrire n&apos;importe quel joueur
           </p>
         </div>
       )}
@@ -592,7 +591,7 @@ export default function TournamentInscriptionPage() {
             Choisissez entre 1 et {tournamentDetails.max_combos} combo(s) pour ce tournoi
             {existingParticipant?.is_validated && (
               <span className="block text-red-300 mt-1">
-                ⚠️ L'inscription est validée, vous ne pouvez plus modifier le nombre de combos
+                ⚠️ L&apos;inscription est validée, vous ne pouvez plus modifier le nombre de combos
               </span>
             )}
           </p>
@@ -688,7 +687,7 @@ export default function TournamentInscriptionPage() {
             className="flex-1 py-3 text-lg font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg transition-all duration-200"
             disabled={existingParticipant?.is_validated && !isAdmin}
           >
-            ❌ {isAdmin ? "Annuler l'inscription" : "Se désinscrire"}
+            ❌ {isAdmin ? "Annuler l&apos;inscription" : "Se désinscrire"}
           </Button>
         )}
         
@@ -697,14 +696,14 @@ export default function TournamentInscriptionPage() {
           disabled={!selectedTournament || selectedComboCount === 0 || (existingParticipant?.is_validated && !isAdmin)}
           className="flex-1 py-3 text-lg font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg transition-all duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed"
         >
-          {existingParticipant ? "💾 Modifier le Deck" : "⚡ S'inscrire maintenant"}
+          {existingParticipant ? "💾 Modifier le Deck" : "⚡ S&apos;inscrire maintenant"}
         </Button>
       </div>
 
       {existingParticipant?.is_validated && (
         <div className="mt-4 p-4 bg-green-600/20 rounded-lg border border-green-500">
           <p className="text-green-300 text-center">
-            ✅ L'inscription est validée {!isAdmin && "et ne peut plus être modifiée"}
+            ✅ L&apos;inscription est validée {!isAdmin && "et ne peut plus être modifiée"}
           </p>
           {isAdmin && (
             <p className="text-yellow-300 text-center text-sm mt-1">
