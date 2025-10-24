@@ -49,6 +49,17 @@ type Bey = {
 
 type TournamentManagementMode = 'inscription' | 'match'
 
+// Helper type for piece options
+type PieceOption = {
+  blade_id?: string
+  bit_id?: string
+  ratchet_id?: string
+  assist_id?: string
+  lock_chip_id?: string
+  name: string
+  type?: string
+}
+
 export default function TournamentManagementPage() {
   const router = useRouter()
 
@@ -89,11 +100,11 @@ export default function TournamentManagementPage() {
   // ============================
   // 🔹 Pièces pour les combos
   // ============================
-  const [blades, setBlades] = useState<{ blade_id: string; name: string; type?: string }[]>([])
-  const [bits, setBits] = useState<{ bit_id: string; name: string; type?: string }[]>([])
-  const [assists, setAssists] = useState<{ assist_id: string; name: string; type?: string }[]>([])
-  const [lockChips, setLockChips] = useState<{ lock_chip_id: string; name: string; type?: string }[]>([])
-  const [ratchets, setRatchets] = useState<{ ratchet_id: string; name: string; type?: string }[]>([])
+  const [blades, setBlades] = useState<PieceOption[]>([])
+  const [bits, setBits] = useState<PieceOption[]>([])
+  const [assists, setAssists] = useState<PieceOption[]>([])
+  const [lockChips, setLockChips] = useState<PieceOption[]>([])
+  const [ratchets, setRatchets] = useState<PieceOption[]>([])
 
   const playerColors: Record<1 | 2, string> = { 1: 'bg-blue-600', 2: 'bg-red-500' }
 
@@ -416,15 +427,21 @@ export default function TournamentManagementPage() {
     value: string,
     pieceType?: string
   ) => {
-    const newBeys = [...beys]
-    newBeys[index][type] = value
+    setBeys(prev => {
+      const newBeys = [...prev]
+      
+      // Update the main piece
+      newBeys[index][type] = value
 
-    if (pieceType) {
-      const typeKey = `${type}Type` as keyof Bey
-      newBeys[index][typeKey] = pieceType
-    }
+      // Update the type field with proper type handling
+      if (pieceType) {
+        const typeKey = `${type}Type` as keyof Bey
+        // Use type assertion to handle the dynamic property assignment
+        (newBeys[index] as any)[typeKey] = pieceType
+      }
 
-    setBeys(newBeys)
+      return newBeys
+    })
   }
 
   const generateComboName = (bey: Bey, index: number): string => {
@@ -553,6 +570,18 @@ export default function TournamentManagementPage() {
         console.error(err)
         alert('Erreur lors de l\'inscription.')
       }
+    }
+  }
+
+  // Helper function to get piece ID based on type
+  const getPieceId = (piece: PieceOption, type: BeyPieceKey): string => {
+    switch (type) {
+      case 'blade': return piece.blade_id!
+      case 'bit': return piece.bit_id!
+      case 'ratchet': return piece.ratchet_id!
+      case 'assist': return piece.assist_id!
+      case 'lockChip': return piece.lock_chip_id!
+      default: return ''
     }
   }
 
@@ -704,25 +733,24 @@ export default function TournamentManagementPage() {
               <div className="grid grid-cols-1 gap-3">
                 {(bey.cx
                   ? [
-                      { key: 'lockChip', options: lockChips, label: 'Lock Chip' },
-                      { key: 'blade', options: blades, label: 'Blade' },
-                      { key: 'assist', options: assists, label: 'Assist' },
-                      { key: 'ratchet', options: ratchets, label: 'Ratchet' },
-                      { key: 'bit', options: bits, label: 'Bit' },
+                      { key: 'lockChip' as BeyPieceKey, options: lockChips, label: 'Lock Chip' },
+                      { key: 'blade' as BeyPieceKey, options: blades, label: 'Blade' },
+                      { key: 'assist' as BeyPieceKey, options: assists, label: 'Assist' },
+                      { key: 'ratchet' as BeyPieceKey, options: ratchets, label: 'Ratchet' },
+                      { key: 'bit' as BeyPieceKey, options: bits, label: 'Bit' },
                     ]
                   : [
-                      { key: 'blade', options: blades, label: 'Blade' },
-                      { key: 'ratchet', options: ratchets, label: 'Ratchet' },
-                      { key: 'bit', options: bits, label: 'Bit' },
+                      { key: 'blade' as BeyPieceKey, options: blades, label: 'Blade' },
+                      { key: 'ratchet' as BeyPieceKey, options: ratchets, label: 'Ratchet' },
+                      { key: 'bit' as BeyPieceKey, options: bits, label: 'Bit' },
                     ]
                 ).map(({ key, options, label }) => {
-                  const pieceKey = key as BeyPieceKey
-                  const selectedValue = bey[pieceKey] ?? ''
+                  const selectedValue = bey[key] ?? ''
 
                   return (
                     <Select
-                      key={pieceKey}
-                      onValueChange={v => handleBeyPieceSelect(index, pieceKey, v)}
+                      key={key}
+                      onValueChange={v => handleBeyPieceSelect(index, key, v)}
                       value={selectedValue}
                     >
                       <SelectTrigger className="bg-gray-900 border border-pink-600">
@@ -730,8 +758,7 @@ export default function TournamentManagementPage() {
                       </SelectTrigger>
                       <SelectContent className="bg-gray-900 text-white">
                         {options.map(o => {
-                          const idKey = pieceKey === 'lockChip' ? 'lock_chip_id' : `${pieceKey}_id`
-                          const optionValue = o[idKey as keyof typeof o] as string
+                          const optionValue = getPieceId(o, key)
                           return (
                             <SelectItem key={optionValue} value={optionValue}>
                               {o.name} {o.type ? `(${o.type})` : ''}
