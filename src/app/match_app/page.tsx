@@ -40,10 +40,11 @@ type MatchInsertData = {
   xtreme_finishes2: number | null;
 };
 
-// Types for deck management
+// Types for deck management - UPDATED: match_id is now optional
 type TournamentDeck = {
   deck_id: string;
   player_id: string;
+  match_id?: string; // Made optional
   combo_id_1?: string;
   combo_id_2?: string;
   combo_id_3?: string;
@@ -188,7 +189,7 @@ export default function OfficialMatch() {
       if (!playerId) return
       
       const { data, error } = await supabase
-        .from('official_matchs_decks')
+        .from('official_matches_decks')
         .select('*')
         .eq('player_id', playerId)
         .order('Date_Creation', { ascending: false })
@@ -457,7 +458,7 @@ export default function OfficialMatch() {
   }
 
   // ======================================================
-  // 🛠️ Deck Management Functions
+  // 🛠️ Deck Management Functions - UPDATED: No match_id required
   // ======================================================
   const handlePlayerSelectForDeck = async (playerId: string) => {
     setSelectedPlayerForDeck(playerId)
@@ -467,7 +468,7 @@ export default function OfficialMatch() {
     if (playerId) {
       // Check for existing deck
       const { data: deckData } = await supabase
-        .from('official_matchs_decks')
+        .from('official_matches_decks')
         .select('*')
         .eq('player_id', playerId)
         .order('Date_Creation', { ascending: false })
@@ -677,14 +678,14 @@ export default function OfficialMatch() {
       }
 
       if (existingDeck) {
-        // Update existing deck
+        // Update existing deck - UPDATED: No match_id included
         const deckUpdate: Record<string, string> = {}
         comboIds.forEach((id, idx) => {
           deckUpdate[`combo_id_${idx + 1}`] = id
         })
 
         const { error: deckError } = await supabase
-          .from("official_matchs_decks")
+          .from("official_matches_decks")
           .update(deckUpdate)
           .eq("deck_id", existingDeck.deck_id)
 
@@ -692,7 +693,7 @@ export default function OfficialMatch() {
 
         alert("Deck mis à jour avec succès !")
       } else {
-        // Create new deck
+        // Create new deck - UPDATED: No match_id included
         const deckInsert: Record<string, string> = {
           player_id: selectedPlayerForDeck,
         }
@@ -701,7 +702,7 @@ export default function OfficialMatch() {
         })
 
         const { data: deck, error: deckError } = await supabase
-          .from("official_matchs_decks")
+          .from("official_matches_decks")
           .insert(deckInsert)
           .select()
           .single()
