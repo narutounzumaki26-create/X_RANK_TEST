@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 
-// Types basés uniquement sur matches et official_matches_decks
+// Types basés uniquement sur matches et official_matchs_decks
 type Match = {
   match_id: string
   tournament_id: string | null
@@ -225,7 +225,7 @@ export default function TournamentManagementPage() {
     }
 
     const { data, error } = await supabase
-      .from('official_matches_decks') // ✅ CORRIGÉ
+      .from('official_matchs_decks') // ✅ CORRIGÉ
       .select('*')
       .eq('player_id', playerId)
       .order('Date_Creation', { ascending: false })
@@ -398,7 +398,7 @@ export default function TournamentManagementPage() {
         comboIds.push(combo.combo_id)
       }
 
-      // Créer le deck dans official_matches_decks
+      // Créer le deck dans official_matchs_decks
       const deckData = {
         player_id: selectedPlayerForDeck,
         match_id: null, // Pas encore associé à un match
@@ -410,7 +410,7 @@ export default function TournamentManagementPage() {
       }
 
       const { error: deckError } = await supabase
-        .from('official_matches_decks') // ✅ CORRIGÉ
+        .from('official_matchs_decks') // ✅ CORRIGÉ
         .insert(deckData)
 
       if (deckError) throw deckError
