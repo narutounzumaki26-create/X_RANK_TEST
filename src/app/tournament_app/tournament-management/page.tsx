@@ -23,7 +23,7 @@ type RoundLog = {
   loserCombo: string
 }
 
-// Type for match data to be inserted - CORRIGÉ: created_by fait référence à players, pas à auth.users
+// Type for match data to be inserted - MIS À JOUR avec les nouvelles colonnes
 type MatchInsertData = {
   tournament_id: string | null;
   player1_id: string | null;
@@ -31,12 +31,16 @@ type MatchInsertData = {
   winner_id: string | null;
   loser_id: string | null;
   rounds: number;
-  created_by: string | null; // Ceci doit être un player_id valide, pas un user_id
+  created_by: string | null;
   match_logs: string | null;
   spin_finishes: number | null;
   over_finishes: number | null;
   burst_finishes: number | null;
   xtreme_finishes: number | null;
+  spin_finishes2: number | null; // 🔹 NOUVEAU
+  over_finishes2: number | null; // 🔹 NOUVEAU
+  burst_finishes2: number | null; // 🔹 NOUVEAU
+  xtreme_finishes2: number | null; // 🔹 NOUVEAU
 };
 
 export default function TournamentManagementPage() {
@@ -50,7 +54,7 @@ export default function TournamentManagementPage() {
   const [selectedTournament, setSelectedTournament] = useState<string>('')
   const [participants, setParticipants] = useState<players[]>([])
   const [combosList, setCombosList] = useState<combos[]>([])
-  const [currentPlayerId, setCurrentPlayerId] = useState<string>('') // 🔹 NOUVEAU: Stocker le player_id de l'admin
+  const [currentPlayerId, setCurrentPlayerId] = useState<string>('')
 
   // ============================
   // 🔹 Match / Round state
@@ -94,7 +98,7 @@ export default function TournamentManagementPage() {
       }
 
       setAdmin(true)
-      setCurrentPlayerId(player.player_id) // 🔹 Stocker le player_id de l'admin
+      setCurrentPlayerId(player.player_id)
     }
 
     checkAdmin()
@@ -241,7 +245,7 @@ export default function TournamentManagementPage() {
   }
 
   // ======================================================
-  // 🗄️ Match Creation & Database Storage - CORRIGÉ
+  // 🗄️ Match Creation & Database Storage - MIS À JOUR
   // ======================================================
   const createMatchInDatabase = async (): Promise<string | null> => {
     if (!selectedTournament || !selectedPlayer1 || !selectedPlayer2 || round === 0) {
@@ -249,7 +253,7 @@ export default function TournamentManagementPage() {
       return null
     }
 
-    // Vérifier que currentPlayerId est disponible (created_by doit être un player_id valide)
+    // Vérifier que currentPlayerId est disponible
     if (!currentPlayerId) {
       alert('Erreur: Impossible de déterminer l\'administrateur du match')
       return null
@@ -267,27 +271,34 @@ export default function TournamentManagementPage() {
       loser_id = selectedPlayer1
     }
 
-    // Count finish types
-    const spinFinishes = roundLogs.filter(log => log.action === 'Spin').length
-    const overFinishes = roundLogs.filter(log => log.action === 'Over').length
-    const burstFinishes = roundLogs.filter(log => log.action === 'Burst').length
-    const xtremeFinishes = roundLogs.filter(log => log.action === 'Xtreme').length
+    // 🔹 COMPTAGE DES FINISHES PAR JOUEUR - MIS À JOUR
+    const spinFinishesP1 = roundLogs.filter(log => log.action === 'Spin' && log.player === 1).length
+    const overFinishesP1 = roundLogs.filter(log => log.action === 'Over' && log.player === 1).length
+    const burstFinishesP1 = roundLogs.filter(log => log.action === 'Burst' && log.player === 1).length
+    const xtremeFinishesP1 = roundLogs.filter(log => log.action === 'Xtreme' && log.player === 1).length
 
-    // 🔹 CORRECTION: created_by doit être un player_id valide, pas un user_id
+    const spinFinishesP2 = roundLogs.filter(log => log.action === 'Spin' && log.player === 2).length
+    const overFinishesP2 = roundLogs.filter(log => log.action === 'Over' && log.player === 2).length
+    const burstFinishesP2 = roundLogs.filter(log => log.action === 'Burst' && log.player === 2).length
+    const xtremeFinishesP2 = roundLogs.filter(log => log.action === 'Xtreme' && log.player === 2).length
+
+    // 🔹 CORRECTION: created_by doit être un player_id valide
     const created_by = currentPlayerId
 
-    // Format match logs as JSON string
+    // 🔹 FORMATAGE DES LOGS AVEC NOMS DE COMBOS - MIS À JOUR
     const formattedLogs = JSON.stringify(roundLogs.map(log => ({
       round: log.round,
       player: log.player,
       action: log.action,
       points: log.points,
-      winner_combo: log.winnerCombo,
-      loser_combo: log.loserCombo,
+      winner_combo_name: getComboName(log.winnerCombo), // 🔹 Conversion ID → Nom
+      loser_combo_name: getComboName(log.loserCombo),   // 🔹 Conversion ID → Nom
+      winner_combo_id: log.winnerCombo,                 // 🔹 Garder l'ID aussi
+      loser_combo_id: log.loserCombo,                   // 🔹 Garder l'ID aussi
       timestamp: new Date().toISOString()
     })), null, 2)
 
-    // Prepare match data
+    // Prepare match data - MIS À JOUR avec les nouvelles colonnes
     const matchData: MatchInsertData = {
       tournament_id: selectedTournament,
       player1_id: selectedPlayer1,
@@ -295,12 +306,18 @@ export default function TournamentManagementPage() {
       winner_id: winner_id,
       loser_id: loser_id,
       rounds: round,
-      created_by: created_by, // 🔹 Maintenant c'est un player_id valide
+      created_by: created_by,
       match_logs: formattedLogs,
-      spin_finishes: spinFinishes,
-      over_finishes: overFinishes,
-      burst_finishes: burstFinishes,
-      xtreme_finishes: xtremeFinishes,
+      // Joueur 1
+      spin_finishes: spinFinishesP1,
+      over_finishes: overFinishesP1,
+      burst_finishes: burstFinishesP1,
+      xtreme_finishes: xtremeFinishesP1,
+      // Joueur 2 - NOUVELLES COLONNES
+      spin_finishes2: spinFinishesP2,
+      over_finishes2: overFinishesP2,
+      burst_finishes2: burstFinishesP2,
+      xtreme_finishes2: xtremeFinishesP2,
     }
 
     try {
@@ -327,7 +344,7 @@ export default function TournamentManagementPage() {
   }
 
   // ======================================================
-  // 📊 Update stats and create match
+  // 📊 Update stats and create match - MIS À JOUR
   // ======================================================
   const updatePlayerStatsAndCreateMatch = async () => {
     if (!selectedPlayer1 || !selectedPlayer2) return
@@ -335,13 +352,12 @@ export default function TournamentManagementPage() {
     // First create the match in database
     const matchId = await createMatchInDatabase()
     if (!matchId) {
-      // L'alerte est déjà gérée dans createMatchInDatabase
       return
     }
 
     setCreatedMatchId(matchId)
 
-    // Then update player stats
+    // Then update player stats - MIS À JOUR avec les bonnes statistiques par joueur
     const statsInit: Omit<player_stats, 'player_id'> = {
       matches_played: 1,
       matches_won: 0,
@@ -367,12 +383,19 @@ export default function TournamentManagementPage() {
       statsP2.matches_draw = 1
     }
 
+    // 🔹 COMPTAGE CORRECT PAR JOUEUR - MIS À JOUR
     roundLogs.forEach((log) => {
-      const target = log.player === 1 ? statsP1 : statsP2
-      if (log.action === 'Spin') target.spin_finishes++
-      if (log.action === 'Over') target.over_finishes++
-      if (log.action === 'Burst') target.burst_finishes++
-      if (log.action === 'Xtreme') target.xtreme_finishes++
+      if (log.player === 1) {
+        if (log.action === 'Spin') statsP1.spin_finishes++
+        if (log.action === 'Over') statsP1.over_finishes++
+        if (log.action === 'Burst') statsP1.burst_finishes++
+        if (log.action === 'Xtreme') statsP1.xtreme_finishes++
+      } else {
+        if (log.action === 'Spin') statsP2.spin_finishes++
+        if (log.action === 'Over') statsP2.over_finishes++
+        if (log.action === 'Burst') statsP2.burst_finishes++
+        if (log.action === 'Xtreme') statsP2.xtreme_finishes++
+      }
     })
 
     const applyStats = async (playerId: string, s: typeof statsP1) => {
@@ -555,7 +578,7 @@ export default function TournamentManagementPage() {
         })}
       </div>
 
-      {/* Historique */}
+      {/* Historique - MIS À JOUR avec noms de combos */}
       {roundLogs.length > 0 && (
         <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-blue-500 shadow-md">
           <h3 className="font-semibold text-blue-300 mb-2">Historique des tours :</h3>
