@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { MainMenuButton } from "@/components/navigation/MainMenuButton";
 
@@ -8,8 +8,6 @@ interface TournamentParticipant {
   player_id: string;
   tournament_id: string;
   is_validated: boolean;
-  tournament_deck: string;
-  created_at?: string;
   player?: {
     player_name: string;
     user_id: string;
@@ -19,24 +17,6 @@ interface TournamentParticipant {
     date: string;
     location: string | null;
   };
-  deck?: {
-    deck_id: string;
-    player_id: string;
-    tournament_id: string;
-    combo_id_1?: string;
-    combo_id_2?: string;
-    combo_id_3?: string;
-    Date_Creation?: string;
-  };
-  combos?: {
-    combo_id: string;
-    name: string;
-    blade?: { name: string };
-    ratchet?: { name: string };
-    bit?: { name: string };
-    assist?: { name: string };
-    lock_chip?: { name: string };
-  }[];
 }
 
 type FilterType = "all" | "validated" | "pending";
@@ -50,113 +30,6 @@ export default function ParticipantValidationDashboard() {
   const [filter, setFilter] = useState<FilterType>("all");
   const [selectedTournament, setSelectedTournament] = useState<string>("all");
   const [updatingIds, setUpdatingIds] = useState<{player_id: string, tournament_id: string} | null>(null);
-  const [expandedDecks, setExpandedDecks] = useState<Set<string>>(new Set());
-
-  const fetchParticipants = useCallback(async () => {
-    try {
-      setLoading(true);
-
-      // First, fetch all tournament participants
-      const { data: participantsData, error } = await supabase
-        .from("tournament_participants")
-        .select(`
-          *,
-          player:player_id(player_name, user_id),
-          tournament:tournament_id(name, date, location)
-        `)
-        .order("created_at", { ascending: false });
-
-      if (error) throw error;
-
-      // Get unique participants (most recent only)
-      const uniqueParticipants = getMostRecentParticipants(participantsData || []);
-
-      // For each participant, fetch their deck and combos
-      const participantsWithDecks: TournamentParticipant[] = await Promise.all(
-        uniqueParticipants.map(async (participant) => {
-          // Fetch the deck for this participant - CORRECTION APPLIQUÉE ICI
-          const { data: deckData, error: deckError } = await supabase
-            .from("tournament_decks")
-            .select(`
-              deck_id,
-              player_id,
-              tournament_id,
-              combo_id_1,
-              combo_id_2,
-              combo_id_3,
-              Date_Creation
-            `)
-            .eq("player_id", participant.player_id)
-            .eq("tournament_id", participant.tournament_id)
-            .order("Date_Creation", { ascending: false })
-            .limit(1)
-            .maybeSingle(); // ← CHANGEMENT : .single() → .maybeSingle()
-
-          if (deckError) {
-            console.error("Error fetching deck:", deckError);
-            return { ...participant, deck: undefined, combos: [] };
-          }
-
-          if (!deckData) {
-            return { ...participant, deck: undefined, combos: [] };
-          }
-
-          const comboIds = [
-            deckData.combo_id_1,
-            deckData.combo_id_2,
-            deckData.combo_id_3,
-          ].filter(Boolean) as string[];
-
-          if (comboIds.length === 0) {
-            return { ...participant, deck: deckData, combos: [] };
-          }
-
-          // Fetch combo details
-          const { data: combosData, error: combosError } = await supabase
-            .from("combos")
-            .select(`
-              combo_id,
-              name,
-              blade:blade_id(name),
-              ratchet:ratchet_id(name),
-              bit:bit_id(name),
-              assist:assist_id(name),
-              lock_chip:lock_chip_id(name)
-            `)
-            .in("combo_id", comboIds);
-
-          if (combosError) {
-            console.error("Error fetching combos:", combosError);
-            return { ...participant, deck: deckData, combos: [] };
-          }
-
-          // Transform the data to match our interface
-          const transformedCombos = combosData?.map(combo => ({
-            combo_id: combo.combo_id,
-            name: combo.name,
-            blade: Array.isArray(combo.blade) ? combo.blade[0] : combo.blade,
-            ratchet: Array.isArray(combo.ratchet) ? combo.ratchet[0] : combo.ratchet,
-            bit: Array.isArray(combo.bit) ? combo.bit[0] : combo.bit,
-            assist: Array.isArray(combo.assist) ? combo.assist[0] : combo.assist,
-            lock_chip: Array.isArray(combo.lock_chip) ? combo.lock_chip[0] : combo.lock_chip,
-          })) || [];
-
-          return {
-            ...participant,
-            deck: deckData,
-            combos: transformedCombos
-          };
-        })
-      );
-
-      setParticipants(participantsWithDecks);
-    } catch (error) {
-      console.error("Error fetching participants:", error);
-      alert("Erreur lors du chargement des participants");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
     const checkAuthAndAdmin = async () => {
@@ -184,7 +57,7 @@ export default function ParticipantValidationDashboard() {
     };
 
     checkAuthAndAdmin();
-  }, [router, fetchParticipants]);
+  }, [router]);
 
   const fetchTournaments = async () => {
     try {
@@ -200,20 +73,28 @@ export default function ParticipantValidationDashboard() {
     }
   };
 
-  // Get only the most recent participant entry for each player-tournament combination
-  const getMostRecentParticipants = (allParticipants: TournamentParticipant[]): TournamentParticipant[] => {
-    const participantMap = new Map();
-    
-    allParticipants.forEach(participant => {
-      const key = `${participant.player_id}-${participant.tournament_id}`;
-      const existing = participantMap.get(key);
-      
-      if (!existing || (participant.created_at && existing.created_at && new Date(participant.created_at) > new Date(existing.created_at))) {
-        participantMap.set(key, participant);
-      }
-    });
+  const fetchParticipants = async () => {
+    try {
+      setLoading(true);
 
-    return Array.from(participantMap.values());
+      const { data: participantsData, error } = await supabase
+        .from("tournament_participants")
+        .select(`
+          *,
+          player:player_id(player_name, user_id),
+          tournament:tournament_id(name, date, location)
+        `)
+        .order("tournament_id")
+        .order("player_id");
+
+      if (error) throw error;
+      setParticipants(participantsData || []);
+    } catch (error) {
+      console.error("Error fetching participants:", error);
+      alert("Erreur lors du chargement des participants");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const toggleValidation = async (player_id: string, tournament_id: string, currentStatus: boolean) => {
@@ -299,23 +180,6 @@ export default function ParticipantValidationDashboard() {
     }
   };
 
-  const toggleDeckExpansion = (playerId: string, tournamentId: string) => {
-    const key = `${playerId}-${tournamentId}`;
-    setExpandedDecks(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(key)) {
-        newSet.delete(key);
-      } else {
-        newSet.add(key);
-      }
-      return newSet;
-    });
-  };
-
-  const isDeckExpanded = (playerId: string, tournamentId: string) => {
-    return expandedDecks.has(`${playerId}-${tournamentId}`);
-  };
-
   const getFilteredParticipants = () => {
     let filtered = participants;
 
@@ -343,22 +207,8 @@ export default function ParticipantValidationDashboard() {
     });
   };
 
-  const formatDateTime = (dateString: string): string => {
-    return new Date(dateString).toLocaleDateString("fr-FR", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit"
-    });
-  };
-
   const isUpdating = (player_id: string, tournament_id: string) => {
     return updatingIds?.player_id === player_id && updatingIds?.tournament_id === tournament_id;
-  };
-
-  const getComboType = (combo: { assist?: { name: string }; lock_chip?: { name: string } }): string => {
-    return combo.assist && combo.lock_chip ? "CX" : "Standard";
   };
 
   const filteredParticipants = getFilteredParticipants();
@@ -381,7 +231,7 @@ export default function ParticipantValidationDashboard() {
               👑 Validation des Participants
             </h1>
             <p className="text-gray-300">
-              Dashboard administrateur - Deck le plus récent (max 3 combos)
+              Dashboard administrateur - Gestion des validations de tournoi
             </p>
           </div>
           <MainMenuButton />
@@ -462,13 +312,12 @@ export default function ParticipantValidationDashboard() {
           {/* Table Header */}
           <div className="bg-gradient-to-r from-purple-700 to-purple-800 px-6 py-4 border-b border-purple-600">
             <div className="grid grid-cols-12 gap-4 text-sm font-semibold text-purple-200">
-              <div className="col-span-2">Joueur</div>
-              <div className="col-span-2">Tournoi</div>
-              <div className="col-span-1">Date Tournoi</div>
-              <div className="col-span-1">Lieu</div>
+              <div className="col-span-3">Joueur</div>
+              <div className="col-span-3">Tournoi</div>
+              <div className="col-span-2">Date</div>
+              <div className="col-span-2">Lieu</div>
               <div className="col-span-1">Statut</div>
-              <div className="col-span-3">Deck (3 combos max)</div>
-              <div className="col-span-2">Actions</div>
+              <div className="col-span-1">Actions</div>
             </div>
           </div>
 
@@ -484,186 +333,75 @@ export default function ParticipantValidationDashboard() {
               </div>
             ) : (
               filteredParticipants.map((participant) => (
-                <div key={`${participant.player_id}-${participant.tournament_id}`}>
-                  {/* Main Participant Row */}
-                  <div className="px-6 py-4 hover:bg-gray-750 transition-colors">
-                    <div className="grid grid-cols-12 gap-4 items-center">
-                      {/* Player */}
-                      <div className="col-span-2">
-                        <div className="font-semibold text-white">
-                          {participant.player?.player_name}
-                        </div>
-                        <div className="text-sm text-gray-400">
-                          ID: {participant.player_id.substring(0, 8)}...
-                        </div>
+                <div
+                  key={`${participant.player_id}-${participant.tournament_id}`}
+                  className="px-6 py-4 hover:bg-gray-750 transition-colors"
+                >
+                  <div className="grid grid-cols-12 gap-4 items-center">
+                    {/* Player */}
+                    <div className="col-span-3">
+                      <div className="font-semibold text-white">
+                        {participant.player?.player_name}
                       </div>
-
-                      {/* Tournament */}
-                      <div className="col-span-2">
-                        <div className="font-semibold text-white">
-                          {participant.tournament?.name}
-                        </div>
-                        <div className="text-sm text-gray-400">
-                          ID: {participant.tournament_id.substring(0, 8)}...
-                        </div>
+                      <div className="text-sm text-gray-400">
+                        ID: {participant.player_id.substring(0, 8)}...
                       </div>
+                    </div>
 
-                      {/* Date */}
-                      <div className="col-span-1 text-gray-300 text-sm">
-                        {participant.tournament?.date ? formatDate(participant.tournament.date) : 'N/A'}
+                    {/* Tournament */}
+                    <div className="col-span-3">
+                      <div className="font-semibold text-white">
+                        {participant.tournament?.name}
                       </div>
-
-                      {/* Location */}
-                      <div className="col-span-1 text-gray-300 text-sm">
-                        {participant.tournament?.location || 'Non spécifié'}
+                      <div className="text-sm text-gray-400">
+                        ID: {participant.tournament_id.substring(0, 8)}...
                       </div>
+                    </div>
 
-                      {/* Status */}
-                      <div className="col-span-1">
-                        <span
-                          className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
-                            participant.is_validated
-                              ? "bg-green-600 text-white"
-                              : "bg-yellow-600 text-white"
-                          }`}
-                        >
-                          {participant.is_validated ? "✅ Validé" : "⏳ En attente"}
-                        </span>
-                      </div>
+                    {/* Date */}
+                    <div className="col-span-2 text-gray-300">
+                      {participant.tournament?.date ? formatDate(participant.tournament.date) : 'N/A'}
+                    </div>
 
-                      {/* Deck Summary */}
-                      <div className="col-span-3">
-                        {participant.combos && participant.combos.length > 0 ? (
-                          <div className="text-sm">
-                            <div className="text-white font-semibold mb-1">
-                              Deck Récent ({participant.combos.length}/3 combos)
-                              {participant.deck?.Date_Creation && (
-                                <div className="text-gray-400 text-xs">
-                                  Créé le {formatDateTime(participant.deck.Date_Creation)}
-                                </div>
-                              )}
-                            </div>
-                            <div className="space-y-1">
-                              {participant.combos.slice(0, 3).map((combo, index) => (
-                                <div key={combo.combo_id} className="flex items-center justify-between bg-gray-700 px-2 py-1 rounded">
-                                  <span className="text-white text-xs">
-                                    Combo {index + 1}: {combo.name}
-                                  </span>
-                                  <span className={`px-1 py-0.5 rounded text-xs ${
-                                    getComboType(combo) === 'CX' ? 'bg-pink-600' : 'bg-blue-600'
-                                  }`}>
-                                    {getComboType(combo)}
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
-                            <button
-                              onClick={() => toggleDeckExpansion(participant.player_id, participant.tournament_id)}
-                              className="text-blue-400 hover:text-blue-300 text-xs mt-2"
-                            >
-                              {isDeckExpanded(participant.player_id, participant.tournament_id) ? "▲ Masquer détails" : "▼ Voir détails complets"}
-                            </button>
-                          </div>
-                        ) : participant.deck ? (
-                          <div className="text-sm">
-                            <span className="text-gray-400">Deck créé mais aucun combo configuré</span>
-                            {participant.deck.Date_Creation && (
-                              <div className="text-gray-400 text-xs">
-                                Créé le {formatDateTime(participant.deck.Date_Creation)}
-                              </div>
-                            )}
-                          </div>
+                    {/* Location */}
+                    <div className="col-span-2 text-gray-300">
+                      {participant.tournament?.location || 'Non spécifié'}
+                    </div>
+
+                    {/* Status */}
+                    <div className="col-span-1">
+                      <span
+                        className={`inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold ${
+                          participant.is_validated
+                            ? "bg-green-600 text-white"
+                            : "bg-yellow-600 text-white"
+                        }`}
+                      >
+                        {participant.is_validated ? "✅ Validé" : "⏳ En attente"}
+                      </span>
+                    </div>
+
+                    {/* Actions */}
+                    <div className="col-span-1">
+                      <button
+                        onClick={() => toggleValidation(participant.player_id, participant.tournament_id, participant.is_validated)}
+                        disabled={isUpdating(participant.player_id, participant.tournament_id)}
+                        className={`w-full py-2 px-3 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                          participant.is_validated
+                            ? "bg-yellow-600 hover:bg-yellow-700 text-white"
+                            : "bg-green-600 hover:bg-green-700 text-white"
+                        }`}
+                      >
+                        {isUpdating(participant.player_id, participant.tournament_id) ? (
+                          "⏳..."
+                        ) : participant.is_validated ? (
+                          "❌ Invalider"
                         ) : (
-                          <span className="text-gray-400 text-sm">Aucun deck créé</span>
+                          "✅ Valider"
                         )}
-                      </div>
-
-                      {/* Actions */}
-                      <div className="col-span-2">
-                        <button
-                          onClick={() => toggleValidation(participant.player_id, participant.tournament_id, participant.is_validated)}
-                          disabled={isUpdating(participant.player_id, participant.tournament_id)}
-                          className={`w-full py-2 px-3 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
-                            participant.is_validated
-                              ? "bg-yellow-600 hover:bg-yellow-700 text-white"
-                              : "bg-green-600 hover:bg-green-700 text-white"
-                          }`}
-                        >
-                          {isUpdating(participant.player_id, participant.tournament_id) ? (
-                            "⏳..."
-                          ) : participant.is_validated ? (
-                            "❌ Invalider"
-                          ) : (
-                            "✅ Valider"
-                          )}
-                        </button>
-                      </div>
+                      </button>
                     </div>
                   </div>
-
-                  {/* Expanded Deck Details */}
-                  {isDeckExpanded(participant.player_id, participant.tournament_id) && participant.combos && participant.combos.length > 0 && (
-                    <div className="bg-gray-750 px-6 py-4 border-t border-gray-600">
-                      <h4 className="font-semibold text-purple-300 mb-3">🎯 Détails Complets du Deck</h4>
-                      {participant.deck?.Date_Creation && (
-                        <div className="text-sm text-gray-400 mb-3">
-                          Deck créé le {formatDateTime(participant.deck.Date_Creation)}
-                        </div>
-                      )}
-                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        {participant.combos.slice(0, 3).map((combo, index) => (
-                          <div key={combo.combo_id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
-                            <div className="flex justify-between items-start mb-3">
-                              <h5 className="font-semibold text-white text-lg">Combo {index + 1}</h5>
-                              <span className={`px-2 py-1 rounded text-xs font-semibold ${
-                                getComboType(combo) === 'CX' ? 'bg-pink-600 text-white' : 'bg-blue-600 text-white'
-                              }`}>
-                                {getComboType(combo)}
-                              </span>
-                            </div>
-                            <div className="space-y-2">
-                              <div className="text-sm">
-                                <span className="text-gray-400 font-medium">Nom:</span>
-                                <div className="text-white font-semibold mt-1">{combo.name}</div>
-                              </div>
-                              <div className="grid grid-cols-2 gap-2 text-sm">
-                                {combo.blade && (
-                                  <div>
-                                    <span className="text-gray-400">🗡️ Blade:</span>
-                                    <div className="text-white">{combo.blade.name}</div>
-                                  </div>
-                                )}
-                                {combo.ratchet && (
-                                  <div>
-                                    <span className="text-gray-400">⚙️ Ratchet:</span>
-                                    <div className="text-white">{combo.ratchet.name}</div>
-                                  </div>
-                                )}
-                                {combo.bit && (
-                                  <div>
-                                    <span className="text-gray-400">🎯 Bit:</span>
-                                    <div className="text-white">{combo.bit.name}</div>
-                                  </div>
-                                )}
-                                {combo.assist && (
-                                  <div>
-                                    <span className="text-gray-400">🛡️ Assist:</span>
-                                    <div className="text-white">{combo.assist.name}</div>
-                                  </div>
-                                )}
-                                {combo.lock_chip && (
-                                  <div>
-                                    <span className="text-gray-400">🔒 Lock Chip:</span>
-                                    <div className="text-white">{combo.lock_chip.name}</div>
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
                 </div>
               ))
             )}
@@ -677,7 +415,7 @@ export default function ParticipantValidationDashboard() {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <button
-              onClick={() => { setFilter("pending"); setSelectedTournament("all"); }}
+              onClick={() => setFilter("pending")}
               className="bg-yellow-600 hover:bg-yellow-700 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
             >
               👀 Voir En Attente
@@ -711,8 +449,7 @@ export default function ParticipantValidationDashboard() {
               <li>• Cliquez sur &quot;Valider&quot; pour approuver un participant</li>
               <li>• Cliquez sur &quot;Invalider&quot; pour retirer l&apos;approbation</li>
               <li>• Utilisez &quot;Tout Valider&quot; pour valider tous les participants en attente</li>
-              <li>• Chaque joueur affiche son deck le plus récent (max 3 combos)</li>
-              <li>• Cliquez sur &quot;Voir détails complets&quot; pour afficher les détails des combos</li>
+              <li>• Utilisez les filtres pour affiner votre recherche</li>
             </ul>
           </div>
           <div>
@@ -722,8 +459,7 @@ export default function ParticipantValidationDashboard() {
               <li>• {participants.filter(p => !p.is_validated).length} participants en attente</li>
               <li>• {new Set(participants.map(p => p.tournament_id)).size} tournois actifs</li>
               <li>• {new Set(participants.map(p => p.player_id)).size} joueurs uniques</li>
-              <li>• {participants.filter(p => p.deck).length} decks créés</li>
-              <li>• {participants.filter(p => p.combos && p.combos.length > 0).length} decks avec combos</li>
+              <li>• {selectedTournament !== "all" ? `Filtré sur: ${tournaments.find(t => t.tournament_id === selectedTournament)?.name}` : "Tous les tournois"}</li>
             </ul>
           </div>
         </div>
