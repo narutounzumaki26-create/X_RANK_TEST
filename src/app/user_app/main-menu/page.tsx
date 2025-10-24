@@ -39,7 +39,7 @@ export default async function MainMenuPage() {
     .from("players")
     .select("player_name, Admin")
     .eq("user_id", user.id)
-    .Single();
+    .single();
 
   const playerName = playerError || !player ? "Blader" : player.player_name;
   const isAdmin = player?.Admin === true;
