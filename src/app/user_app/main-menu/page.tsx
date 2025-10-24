@@ -39,7 +39,7 @@ export default async function MainMenuPage() {
     .from("players")
     .select("player_name, Admin")
     .eq("user_id", user.id)
-    .maybeSingle();
+    .Single();
 
   const playerName = playerError || !player ? "Blader" : player.player_name;
   const isAdmin = player?.Admin === true;
@@ -81,7 +81,7 @@ export default async function MainMenuPage() {
       href: "/tournament_app/tournament-inscription",
       label: "Inscriptions aux tournois",
       icon: "🧾",
-      description: "Valide les participants et prépare leurs decks.",
+      description: "Inscrivez vous aux tournois organisés dans toute la France.",
       gradient: "from-indigo-500/70 via-blue-600/70 to-cyan-700/60",
       shadow: "shadow-[0_0_22px_rgba(120,160,255,0.25)] hover:shadow-[0_0_28px_rgba(120,180,255,0.45)]",
     },
@@ -102,6 +102,14 @@ export default async function MainMenuPage() {
       icon: "⚙️",
       description: "Renseigne les placements, decks et vainqueurs.",
       gradient: "from-amber-500/70 via-orange-600/70 to-rose-600/60",
+      shadow: "shadow-[0_0_22px_rgba(255,200,80,0.25)] hover:shadow-[0_0_28px_rgba(255,180,80,0.45)]",
+    },
+    {
+      href: "/tournament_app/Validation_Dashboard",
+      label: "Validations des participants",
+      icon: "✅",
+      description: "Valider les participations des joueurs",
+      gradient: "from-amber-500/70 via-green-600/70 to-rose-600/60",
       shadow: "shadow-[0_0_22px_rgba(255,200,80,0.25)] hover:shadow-[0_0_28px_rgba(255,180,80,0.45)]",
     },
     {
