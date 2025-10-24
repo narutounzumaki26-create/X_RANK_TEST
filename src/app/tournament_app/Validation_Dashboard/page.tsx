@@ -75,7 +75,7 @@ export default function ParticipantValidationDashboard() {
       const uniqueParticipants = getMostRecentParticipants(participantsData || []);
 
       // Fetch combo details for each participant
-      const participantsWithCombos = await Promise.all(
+      const participantsWithCombos: TournamentParticipant[] = await Promise.all(
         uniqueParticipants.map(async (participant) => {
           if (!participant.deck) return participant;
 
@@ -105,9 +105,20 @@ export default function ParticipantValidationDashboard() {
             return participant;
           }
 
+          // Transform the data to match our interface
+          const transformedCombos = combosData?.map(combo => ({
+            combo_id: combo.combo_id,
+            name: combo.name,
+            blade: Array.isArray(combo.blade) ? combo.blade[0] : combo.blade,
+            ratchet: Array.isArray(combo.ratchet) ? combo.ratchet[0] : combo.ratchet,
+            bit: Array.isArray(combo.bit) ? combo.bit[0] : combo.bit,
+            assist: Array.isArray(combo.assist) ? combo.assist[0] : combo.assist,
+            lock_chip: Array.isArray(combo.lock_chip) ? combo.lock_chip[0] : combo.lock_chip,
+          })) || [];
+
           return {
             ...participant,
-            combos: combosData || []
+            combos: transformedCombos
           };
         })
       );
