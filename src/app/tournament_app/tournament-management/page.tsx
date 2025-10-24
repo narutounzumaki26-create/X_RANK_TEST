@@ -60,15 +60,6 @@ type PieceOption = {
   type?: string
 }
 
-// Type guard functions for Bey type
-const isBeyPieceKey = (key: string): key is BeyPieceKey => {
-  return ['blade', 'bit', 'ratchet', 'assist', 'lockChip'].includes(key)
-}
-
-const isBeyTypeKey = (key: string): key is keyof Bey => {
-  return ['bladeType', 'bitType', 'ratchetType', 'assistType', 'lockChipType'].includes(key)
-}
-
 export default function TournamentManagementPage() {
   const router = useRouter()
 
@@ -442,31 +433,21 @@ export default function TournamentManagementPage() {
       // Update the main piece
       newBeys[index][type] = value
 
-      // Update the type field with proper type handling
+      // Update the type field with a simpler approach
       if (pieceType) {
         const typeKey = `${type}Type` as keyof Bey
         
-        // Use a type-safe approach with a switch statement
-        switch (typeKey) {
-          case 'bladeType':
-            newBeys[index].bladeType = pieceType
-            break
-          case 'bitType':
-            newBeys[index].bitType = pieceType
-            break
-          case 'ratchetType':
-            newBeys[index].ratchetType = pieceType
-            break
-          case 'assistType':
-            newBeys[index].assistType = pieceType
-            break
-          case 'lockChipType':
-            newBeys[index].lockChipType = pieceType
-            break
-          default:
-            // This should never happen, but for type safety
-            const exhaustiveCheck: never = typeKey
-            return exhaustiveCheck
+        // Use a type-safe assignment without complex switch
+        if (typeKey === 'bladeType') {
+          newBeys[index].bladeType = pieceType
+        } else if (typeKey === 'bitType') {
+          newBeys[index].bitType = pieceType
+        } else if (typeKey === 'ratchetType') {
+          newBeys[index].ratchetType = pieceType
+        } else if (typeKey === 'assistType') {
+          newBeys[index].assistType = pieceType
+        } else if (typeKey === 'lockChipType') {
+          newBeys[index].lockChipType = pieceType
         }
       }
 
