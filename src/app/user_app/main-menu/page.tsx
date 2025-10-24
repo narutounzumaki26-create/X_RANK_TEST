@@ -78,6 +78,14 @@ export default async function MainMenuPage() {
       shadow: "shadow-[0_0_22px_rgba(0,255,120,0.25)] hover:shadow-[0_0_28px_rgba(0,255,150,0.45)]",
     },
     {
+      href: "/tournament_app/tournament-inscription",
+      label: "Inscriptions aux tournois",
+      icon: "🧾",
+      description: "Valide les participants et prépare leurs decks.",
+      gradient: "from-indigo-500/70 via-blue-600/70 to-cyan-700/60",
+      shadow: "shadow-[0_0_22px_rgba(120,160,255,0.25)] hover:shadow-[0_0_28px_rgba(120,180,255,0.45)]",
+    },
+    {
       href: "/solo_blade_app/pet-leaderboard",
       label: "Classement Beys",
       icon: "🌀",
@@ -88,14 +96,6 @@ export default async function MainMenuPage() {
   ];
 
   const adminLinks: MenuLink[] = [
-    {
-      href: "/tournament_app/tournament-inscription",
-      label: "Inscriptions",
-      icon: "🧾",
-      description: "Valide les participants et prépare leurs decks.",
-      gradient: "from-indigo-500/70 via-blue-600/70 to-cyan-700/60",
-      shadow: "shadow-[0_0_22px_rgba(120,160,255,0.25)] hover:shadow-[0_0_28px_rgba(120,180,255,0.45)]",
-    },
     {
       href: "/tournament_app/tournament-management",
       label: "Gestion des matchs",
