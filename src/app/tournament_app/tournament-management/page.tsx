@@ -23,7 +23,7 @@ type RoundLog = {
   loserCombo: string
 }
 
-// Type for match data to be inserted
+// Type for match data to be inserted - CORRIGÉ: created_by fait référence à players, pas à auth.users
 type MatchInsertData = {
   tournament_id: string | null;
   player1_id: string | null;
@@ -31,7 +31,7 @@ type MatchInsertData = {
   winner_id: string | null;
   loser_id: string | null;
   rounds: number;
-  created_by: string | null;
+  created_by: string | null; // Ceci doit être un player_id valide, pas un user_id
   match_logs: string | null;
   spin_finishes: number | null;
   over_finishes: number | null;
@@ -50,6 +50,7 @@ export default function TournamentManagementPage() {
   const [selectedTournament, setSelectedTournament] = useState<string>('')
   const [participants, setParticipants] = useState<players[]>([])
   const [combosList, setCombosList] = useState<combos[]>([])
+  const [currentPlayerId, setCurrentPlayerId] = useState<string>('') // 🔹 NOUVEAU: Stocker le player_id de l'admin
 
   // ============================
   // 🔹 Match / Round state
@@ -70,7 +71,7 @@ export default function TournamentManagementPage() {
   const playerColors: Record<1 | 2, string> = { 1: 'bg-blue-600', 2: 'bg-red-500' }
 
   // ======================================================
-  // 🧭 Vérification admin
+  // 🧭 Vérification admin + récupération du player_id
   // ======================================================
   useEffect(() => {
     const checkAdmin = async () => {
@@ -83,9 +84,9 @@ export default function TournamentManagementPage() {
 
       const { data: player, error } = await supabase
         .from('players')
-        .select('Admin')
+        .select('player_id, Admin')
         .eq('user_id', user.id)
-        .single<players>()
+        .single<players & { Admin: boolean }>()
 
       if (error || !player || !player.Admin) {
         router.push('/')
@@ -93,6 +94,7 @@ export default function TournamentManagementPage() {
       }
 
       setAdmin(true)
+      setCurrentPlayerId(player.player_id) // 🔹 Stocker le player_id de l'admin
     }
 
     checkAdmin()
@@ -154,26 +156,24 @@ export default function TournamentManagementPage() {
   }, [selectedTournament])
 
   // ======================================================
-  // 🧩 Fetch Decks - CORRIGÉ AVEC Date_Creation
+  // 🧩 Fetch Decks
   // ======================================================
   const fetchPlayerDeck = useCallback(
     async (playerId: string, setDeck: (d: tournament_decks | null) => void) => {
       if (!selectedTournament || !playerId) return
       
-      // Récupérer TOUS les decks du joueur pour ce tournoi, triés par Date_Creation (le plus récent en premier)
       const { data, error } = await supabase
         .from('tournament_decks')
         .select('*')
         .eq('tournament_id', selectedTournament)
         .eq('player_id', playerId)
-        .order('Date_Creation', { ascending: false }) // Le plus récent en premier - CORRIGÉ
-        .limit(1) // Prendre seulement le premier (le plus récent)
+        .order('Date_Creation', { ascending: false })
+        .limit(1)
 
       if (error) {
         console.error('Erreur lors de la récupération du deck:', error)
         setDeck(null)
       } else if (data && data.length > 0) {
-        // Prendre le premier deck (le plus récent)
         setDeck(data[0])
       } else {
         setDeck(null)
@@ -241,11 +241,17 @@ export default function TournamentManagementPage() {
   }
 
   // ======================================================
-  // 🗄️ Match Creation & Database Storage
+  // 🗄️ Match Creation & Database Storage - CORRIGÉ
   // ======================================================
   const createMatchInDatabase = async (): Promise<string | null> => {
     if (!selectedTournament || !selectedPlayer1 || !selectedPlayer2 || round === 0) {
       alert('Impossible de créer le match: données manquantes')
+      return null
+    }
+
+    // Vérifier que currentPlayerId est disponible (created_by doit être un player_id valide)
+    if (!currentPlayerId) {
+      alert('Erreur: Impossible de déterminer l\'administrateur du match')
       return null
     }
 
@@ -260,7 +266,6 @@ export default function TournamentManagementPage() {
       winner_id = selectedPlayer2
       loser_id = selectedPlayer1
     }
-    // If draw, both winner_id and loser_id remain null
 
     // Count finish types
     const spinFinishes = roundLogs.filter(log => log.action === 'Spin').length
@@ -268,9 +273,8 @@ export default function TournamentManagementPage() {
     const burstFinishes = roundLogs.filter(log => log.action === 'Burst').length
     const xtremeFinishes = roundLogs.filter(log => log.action === 'Xtreme').length
 
-    // Get current user for created_by
-    const { data: { user } } = await supabase.auth.getUser()
-    const created_by = user?.id || null
+    // 🔹 CORRECTION: created_by doit être un player_id valide, pas un user_id
+    const created_by = currentPlayerId
 
     // Format match logs as JSON string
     const formattedLogs = JSON.stringify(roundLogs.map(log => ({
@@ -291,7 +295,7 @@ export default function TournamentManagementPage() {
       winner_id: winner_id,
       loser_id: loser_id,
       rounds: round,
-      created_by: created_by,
+      created_by: created_by, // 🔹 Maintenant c'est un player_id valide
       match_logs: formattedLogs,
       spin_finishes: spinFinishes,
       over_finishes: overFinishes,
@@ -300,6 +304,8 @@ export default function TournamentManagementPage() {
     }
 
     try {
+      console.log('📤 Envoi des données du match:', matchData)
+      
       const { data, error } = await supabase
         .from('matches')
         .insert([matchData])
@@ -307,15 +313,15 @@ export default function TournamentManagementPage() {
         .single()
 
       if (error) {
-        console.error('Erreur lors de la création du match:', error)
-        alert(`Erreur: ${error.message}`)
+        console.error('❌ Erreur lors de la création du match:', error)
+        alert(`Erreur lors de la création du match: ${error.message}`)
         return null
       }
 
       console.log('✅ Match créé avec succès, ID:', data.match_id)
       return data.match_id
     } catch (error) {
-      console.error('Exception lors de la création du match:', error)
+      console.error('❌ Exception lors de la création du match:', error)
       return null
     }
   }
@@ -329,7 +335,7 @@ export default function TournamentManagementPage() {
     // First create the match in database
     const matchId = await createMatchInDatabase()
     if (!matchId) {
-      alert('Échec de la création du match dans la base de données')
+      // L'alerte est déjà gérée dans createMatchInDatabase
       return
     }
 
