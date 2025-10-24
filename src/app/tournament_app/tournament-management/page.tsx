@@ -39,12 +39,7 @@ interface Combo {
   assist_id: string | null
   lock_chip_id: string | null
   created_at: string
-}
-
-interface PlayerCombo {
-  combo_id: string
-  player_id: string
-  combos: Combo
+  created_by?: string
 }
 
 // Helper type for piece options
@@ -149,53 +144,44 @@ export default function ComboManagementPage() {
   const fetchUserCombos = async () => {
     if (!playerId) return
 
-    // First, check if player_combos table exists and has data
-    const { data, error } = await supabase
-      .from('player_combos')
-      .select(`
-        combo_id,
-        combos (
-          combo_id,
-          name,
-          blade_id,
-          ratchet_id,
-          bit_id,
-          assist_id,
-          lock_chip_id,
-          created_at
-        )
-      `)
-      .eq('player_id', playerId)
+    try {
+      // Try multiple approaches to fetch user combos
+      let userCombos: Combo[] = []
 
-    if (error) {
-      console.error('Error fetching player combos:', error)
-      
-      // If player_combos doesn't exist or is empty, try fetching directly from combos
+      // Approach 1: Direct query using created_by (most reliable)
       const { data: directData, error: directError } = await supabase
         .from('combos')
         .select('*')
-        .eq('created_by', playerId) // Assuming you have a created_by column
+        .or(`created_by.eq.${playerId},player_id.eq.${playerId}`)
         .order('created_at', { ascending: false })
 
-      if (directError) {
-        console.error('Error fetching combos directly:', directError)
-        return
+      if (!directError && directData) {
+        userCombos = directData as Combo[]
+      } else {
+        // Approach 2: Try player_combos table
+        const { data: playerCombosData, error: playerCombosError } = await supabase
+          .from('player_combos')
+          .select('combo_id')
+          .eq('player_id', playerId)
+
+        if (!playerCombosError && playerCombosData && playerCombosData.length > 0) {
+          const comboIds = playerCombosData.map(pc => pc.combo_id)
+          const { data: combosData, error: combosError } = await supabase
+            .from('combos')
+            .select('*')
+            .in('combo_id', comboIds)
+            .order('created_at', { ascending: false })
+
+          if (!combosError && combosData) {
+            userCombos = combosData as Combo[]
+          }
+        }
       }
 
-      if (directData) {
-        setCombos(directData as Combo[])
-      }
-      return
-    }
-
-    if (data) {
-      // Properly type the response and extract combos
-      const playerCombos = data as PlayerCombo[]
-      const userCombos = playerCombos
-        .map(item => item.combos)
-        .filter((combo): combo is Combo => combo !== null)
-      
       setCombos(userCombos)
+    } catch (error) {
+      console.error('Error fetching user combos:', error)
+      setCombos([])
     }
   }
 
@@ -229,7 +215,7 @@ export default function ComboManagementPage() {
       // Generate auto name
       const name = generateComboName(newCombo)
       setComboName(name)
-      if (!customName) {
+      if (!customName || customName === 'Nouveau Combo') {
         setCustomName(name)
       }
 
@@ -242,7 +228,7 @@ export default function ComboManagementPage() {
       const newCombo = { ...prev, cx: value }
       const name = generateComboName(newCombo)
       setComboName(name)
-      if (!customName) {
+      if (!customName || customName === 'Nouveau Combo') {
         setCustomName(name)
       }
       return newCombo
@@ -317,21 +303,25 @@ export default function ComboManagementPage() {
         assist_id: currentCombo.assist || null,
         lock_chip_id: currentCombo.lockChip || null,
         name: customName,
-        created_by: playerId, // Add created_by to track ownership
+        created_by: playerId,
+        player_id: playerId, // Support both field names
       }
 
       let comboId: string
 
       if (editingCombo) {
-        // Update existing combo
+        // Update existing combo - ensure user owns this combo
         const { data, error } = await supabase
           .from('combos')
           .update(comboData)
           .eq('combo_id', editingCombo.combo_id)
+          .or(`created_by.eq.${playerId},player_id.eq.${playerId}`)
           .select()
           .single()
 
         if (error) throw error
+        if (!data) throw new Error('Combo not found or access denied')
+        
         comboId = editingCombo.combo_id
       } else {
         // Create new combo
@@ -343,22 +333,6 @@ export default function ComboManagementPage() {
 
         if (error) throw error
         comboId = data.combo_id
-
-        // Try to link to player_combos table if it exists
-        try {
-          const { error: linkError } = await supabase
-            .from('player_combos')
-            .insert({
-              player_id: playerId,
-              combo_id: comboId,
-            })
-
-          if (linkError) {
-            console.log('player_combos table might not exist, continuing without link...')
-          }
-        } catch (linkError) {
-          console.log('Could not link to player_combos, continuing...')
-        }
       }
 
       await fetchUserCombos()
@@ -378,27 +352,12 @@ export default function ComboManagementPage() {
     if (!confirm('Êtes-vous sûr de vouloir supprimer ce combo ?')) return
 
     try {
-      // First try to remove from player_combos if it exists
-      try {
-        const { error: unlinkError } = await supabase
-          .from('player_combos')
-          .delete()
-          .eq('combo_id', comboId)
-          .eq('player_id', playerId)
-
-        if (unlinkError) {
-          console.log('player_combos table might not exist, continuing...')
-        }
-      } catch (unlinkError) {
-        console.log('Could not unlink from player_combos, continuing...')
-      }
-
-      // Then delete the combo using created_by to ensure ownership
+      // Delete the combo ensuring ownership
       const { error: deleteError } = await supabase
         .from('combos')
         .delete()
         .eq('combo_id', comboId)
-        .eq('created_by', playerId)
+        .or(`created_by.eq.${playerId},player_id.eq.${playerId}`)
 
       if (deleteError) throw deleteError
 
