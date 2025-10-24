@@ -20,12 +20,14 @@ interface TournamentParticipant {
   };
 }
 
+type FilterType = "all" | "validated" | "pending";
+
 export default function ParticipantValidationDashboard() {
   const router = useRouter();
   const [participants, setParticipants] = useState<TournamentParticipant[]>([]);
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
-  const [filter, setFilter] = useState<"all" | "validated" | "pending">("all");
+  const [filter, setFilter] = useState<FilterType>("all");
 
   useEffect(() => {
     const checkAuthAndAdmin = async () => {
@@ -170,7 +172,7 @@ export default function ParticipantValidationDashboard() {
             </label>
             <select
               value={filter}
-              onChange={(e) => setFilter(e.target.value as any)}
+              onChange={(e) => setFilter(e.target.value as FilterType)}
               className="w-full px-4 py-2 bg-gray-700 border border-blue-600 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
               <option value="all">Tous les participants</option>
@@ -233,12 +235,12 @@ export default function ParticipantValidationDashboard() {
 
                     {/* Date */}
                     <div className="col-span-2 text-gray-300">
-                      {participant.tournament?.date ? formatDate(participant.tournament.date) : 'N/A'}
+                      {participant.tournament?.date ? formatDate(participant.tournament.date) : &apos;N/A&apos;}
                     </div>
 
                     {/* Location */}
                     <div className="col-span-2 text-gray-300">
-                      {participant.tournament?.location || 'Non spécifié'}
+                      {participant.tournament?.location || &apos;Non spécifié&apos;}
                     </div>
 
                     {/* Status */}
@@ -306,8 +308,8 @@ export default function ParticipantValidationDashboard() {
           <div>
             <strong>ℹ️ Instructions:</strong>
             <ul className="mt-2 space-y-1">
-              <li>• Cliquez sur "Valider" pour approuver un participant</li>
-              <li>• Cliquez sur "Invalider" pour retirer l&apos;approbation</li>
+              <li>• Cliquez sur &quot;Valider&quot; pour approuver un participant</li>
+              <li>• Cliquez sur &quot;Invalider&quot; pour retirer l&apos;approbation</li>
               <li>• Utilisez le filtre pour voir les participants en attente</li>
             </ul>
           </div>
