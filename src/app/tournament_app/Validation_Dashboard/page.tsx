@@ -74,7 +74,7 @@ export default function ParticipantValidationDashboard() {
       // For each participant, fetch their deck and combos
       const participantsWithDecks: TournamentParticipant[] = await Promise.all(
         uniqueParticipants.map(async (participant) => {
-          // Fetch the deck for this participant
+          // Fetch the deck for this participant - CORRECTION APPLIQUÉE ICI
           const { data: deckData, error: deckError } = await supabase
             .from("tournament_decks")
             .select(`
@@ -90,7 +90,7 @@ export default function ParticipantValidationDashboard() {
             .eq("tournament_id", participant.tournament_id)
             .order("Date_Creation", { ascending: false })
             .limit(1)
-            .single();
+            .maybeSingle(); // ← CHANGEMENT : .single() → .maybeSingle()
 
           if (deckError) {
             console.error("Error fetching deck:", deckError);
