@@ -21,9 +21,12 @@ interface TournamentParticipant {
   };
   deck?: {
     deck_id: string;
+    player_id: string;
+    tournament_id: string;
     combo_id_1?: string;
     combo_id_2?: string;
     combo_id_3?: string;
+    Date_Creation?: string;
   };
   combos?: {
     combo_id: string;
@@ -53,19 +56,13 @@ export default function ParticipantValidationDashboard() {
     try {
       setLoading(true);
 
-      // Get the most recent deck for each player-tournament combination
+      // First, fetch all tournament participants
       const { data: participantsData, error } = await supabase
         .from("tournament_participants")
         .select(`
           *,
           player:player_id(player_name, user_id),
-          tournament:tournament_id(name, date, location),
-          deck:tournament_deck!inner(
-            deck_id,
-            combo_id_1,
-            combo_id_2,
-            combo_id_3
-          )
+          tournament:tournament_id(name, date, location)
         `)
         .order("created_at", { ascending: false });
 
@@ -74,19 +71,47 @@ export default function ParticipantValidationDashboard() {
       // Get unique participants (most recent only)
       const uniqueParticipants = getMostRecentParticipants(participantsData || []);
 
-      // Fetch combo details for each participant
-      const participantsWithCombos: TournamentParticipant[] = await Promise.all(
+      // For each participant, fetch their deck and combos
+      const participantsWithDecks: TournamentParticipant[] = await Promise.all(
         uniqueParticipants.map(async (participant) => {
-          if (!participant.deck) return participant;
+          // Fetch the deck for this participant
+          const { data: deckData, error: deckError } = await supabase
+            .from("tournament_decks")
+            .select(`
+              deck_id,
+              player_id,
+              tournament_id,
+              combo_id_1,
+              combo_id_2,
+              combo_id_3,
+              Date_Creation
+            `)
+            .eq("player_id", participant.player_id)
+            .eq("tournament_id", participant.tournament_id)
+            .order("Date_Creation", { ascending: false })
+            .limit(1)
+            .single();
+
+          if (deckError) {
+            console.error("Error fetching deck:", deckError);
+            return { ...participant, deck: undefined, combos: [] };
+          }
+
+          if (!deckData) {
+            return { ...participant, deck: undefined, combos: [] };
+          }
 
           const comboIds = [
-            participant.deck.combo_id_1,
-            participant.deck.combo_id_2,
-            participant.deck.combo_id_3,
+            deckData.combo_id_1,
+            deckData.combo_id_2,
+            deckData.combo_id_3,
           ].filter(Boolean) as string[];
 
-          if (comboIds.length === 0) return participant;
+          if (comboIds.length === 0) {
+            return { ...participant, deck: deckData, combos: [] };
+          }
 
+          // Fetch combo details
           const { data: combosData, error: combosError } = await supabase
             .from("combos")
             .select(`
@@ -102,7 +127,7 @@ export default function ParticipantValidationDashboard() {
 
           if (combosError) {
             console.error("Error fetching combos:", combosError);
-            return participant;
+            return { ...participant, deck: deckData, combos: [] };
           }
 
           // Transform the data to match our interface
@@ -118,12 +143,13 @@ export default function ParticipantValidationDashboard() {
 
           return {
             ...participant,
+            deck: deckData,
             combos: transformedCombos
           };
         })
       );
 
-      setParticipants(participantsWithCombos);
+      setParticipants(participantsWithDecks);
     } catch (error) {
       console.error("Error fetching participants:", error);
       alert("Erreur lors du chargement des participants");
@@ -317,6 +343,16 @@ export default function ParticipantValidationDashboard() {
     });
   };
 
+  const formatDateTime = (dateString: string): string => {
+    return new Date(dateString).toLocaleDateString("fr-FR", {
+      day: "2-digit",
+      month: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit"
+    });
+  };
+
   const isUpdating = (player_id: string, tournament_id: string) => {
     return updatingIds?.player_id === player_id && updatingIds?.tournament_id === tournament_id;
   };
@@ -428,7 +464,7 @@ export default function ParticipantValidationDashboard() {
             <div className="grid grid-cols-12 gap-4 text-sm font-semibold text-purple-200">
               <div className="col-span-2">Joueur</div>
               <div className="col-span-2">Tournoi</div>
-              <div className="col-span-1">Date</div>
+              <div className="col-span-1">Date Tournoi</div>
               <div className="col-span-1">Lieu</div>
               <div className="col-span-1">Statut</div>
               <div className="col-span-3">Deck (3 combos max)</div>
@@ -501,6 +537,11 @@ export default function ParticipantValidationDashboard() {
                           <div className="text-sm">
                             <div className="text-white font-semibold mb-1">
                               Deck Récent ({participant.combos.length}/3 combos)
+                              {participant.deck?.Date_Creation && (
+                                <div className="text-gray-400 text-xs">
+                                  Créé le {formatDateTime(participant.deck.Date_Creation)}
+                                </div>
+                              )}
                             </div>
                             <div className="space-y-1">
                               {participant.combos.slice(0, 3).map((combo, index) => (
@@ -523,8 +564,17 @@ export default function ParticipantValidationDashboard() {
                               {isDeckExpanded(participant.player_id, participant.tournament_id) ? "▲ Masquer détails" : "▼ Voir détails complets"}
                             </button>
                           </div>
+                        ) : participant.deck ? (
+                          <div className="text-sm">
+                            <span className="text-gray-400">Deck créé mais aucun combo configuré</span>
+                            {participant.deck.Date_Creation && (
+                              <div className="text-gray-400 text-xs">
+                                Créé le {formatDateTime(participant.deck.Date_Creation)}
+                              </div>
+                            )}
+                          </div>
                         ) : (
-                          <span className="text-gray-400 text-sm">Aucun deck configuré</span>
+                          <span className="text-gray-400 text-sm">Aucun deck créé</span>
                         )}
                       </div>
 
@@ -555,6 +605,11 @@ export default function ParticipantValidationDashboard() {
                   {isDeckExpanded(participant.player_id, participant.tournament_id) && participant.combos && participant.combos.length > 0 && (
                     <div className="bg-gray-750 px-6 py-4 border-t border-gray-600">
                       <h4 className="font-semibold text-purple-300 mb-3">🎯 Détails Complets du Deck</h4>
+                      {participant.deck?.Date_Creation && (
+                        <div className="text-sm text-gray-400 mb-3">
+                          Deck créé le {formatDateTime(participant.deck.Date_Creation)}
+                        </div>
+                      )}
                       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         {participant.combos.slice(0, 3).map((combo, index) => (
                           <div key={combo.combo_id} className="bg-gray-700 rounded-lg p-4 border border-gray-600">
@@ -667,7 +722,8 @@ export default function ParticipantValidationDashboard() {
               <li>• {participants.filter(p => !p.is_validated).length} participants en attente</li>
               <li>• {new Set(participants.map(p => p.tournament_id)).size} tournois actifs</li>
               <li>• {new Set(participants.map(p => p.player_id)).size} joueurs uniques</li>
-              <li>• {participants.filter(p => p.combos && p.combos.length > 0).length} decks configurés</li>
+              <li>• {participants.filter(p => p.deck).length} decks créés</li>
+              <li>• {participants.filter(p => p.combos && p.combos.length > 0).length} decks avec combos</li>
             </ul>
           </div>
         </div>
