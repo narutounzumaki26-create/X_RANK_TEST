@@ -83,8 +83,8 @@ export default function ProfileStatsPage() {
     console.log('🔍 Recherche des matches pour le joueur:', pId)
     
     try {
-      // Essayer d'abord avec created_at, sinon sans ordering
-      let query = supabase
+      // CORRIGÉ: 'const' au lieu de 'let' pour 'query'
+      const query = supabase
         .from('matches')
         .select(`
           *,
@@ -94,7 +94,6 @@ export default function ProfileStatsPage() {
         `)
         .or(`player1_id.eq.${pId},player2_id.eq.${pId}`)
 
-      // Vérifier si created_at existe en essayant d'ajouter le tri
       const { data: matchesData, error } = await query
 
       if (error) {
@@ -416,7 +415,7 @@ export default function ProfileStatsPage() {
           <div className="bg-gray-800 rounded-xl p-8 mb-8 border border-yellow-500 text-center">
             <h3 className="text-2xl font-bold mb-4 text-yellow-300">📊 Aucune statistique disponible</h3>
             <p className="text-gray-300 mb-4">
-              Vous n'avez pas encore joué de matchs enregistrés dans le système.
+              Vous n&apos;avez pas encore joué de matchs enregistrés dans le système.
             </p>
             <p className="text-gray-400 text-sm">
               Les statistiques apparaîtront ici après votre premier match.
