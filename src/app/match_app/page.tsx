@@ -13,7 +13,7 @@ import {
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
 
-// Types basés uniquement sur matches et oficial_matches_decks
+// Types basés uniquement sur matches et official_matches_decks
 type Match = {
   match_id: string
   tournament_id: string | null
@@ -34,7 +34,7 @@ type Match = {
   xtreme_finishes2: number | null
 }
 
-type OficialMatchDeck = {
+type OfficialMatchDeck = {
   match_id: string
   player_id: string
   combo_id_1: string | null
@@ -123,8 +123,8 @@ export default function TournamentManagementPage() {
   // ============================
   const [selectedPlayer1, setSelectedPlayer1] = useState<string>('')
   const [selectedPlayer2, setSelectedPlayer2] = useState<string>('')
-  const [player1Decks, setPlayer1Decks] = useState<OficialMatchDeck[]>([])
-  const [player2Decks, setPlayer2Decks] = useState<OficialMatchDeck[]>([])
+  const [player1Decks, setPlayer1Decks] = useState<OfficialMatchDeck[]>([])
+  const [player2Decks, setPlayer2Decks] = useState<OfficialMatchDeck[]>([])
   const [selectedDeck1, setSelectedDeck1] = useState<string>('')
   const [selectedDeck2, setSelectedDeck2] = useState<string>('')
   const [player1Score, setPlayer1Score] = useState(0)
@@ -218,14 +218,14 @@ export default function TournamentManagementPage() {
   // ======================================================
   // 🧩 Fetch Decks pour les joueurs sélectionnés
   // ======================================================
-  const fetchPlayerDecks = useCallback(async (playerId: string, setDecks: (d: OficialMatchDeck[]) => void) => {
+  const fetchPlayerDecks = useCallback(async (playerId: string, setDecks: (d: OfficialMatchDeck[]) => void) => {
     if (!playerId) {
       setDecks([])
       return
     }
 
     const { data, error } = await supabase
-      .from('oficial_matches_decks')
+      .from('official_matches_decks') // ✅ CORRIGÉ
       .select('*')
       .eq('player_id', playerId)
       .order('Date_Creation', { ascending: false })
@@ -398,7 +398,7 @@ export default function TournamentManagementPage() {
         comboIds.push(combo.combo_id)
       }
 
-      // Créer le deck dans oficial_matches_decks
+      // Créer le deck dans official_matches_decks
       const deckData = {
         player_id: selectedPlayerForDeck,
         match_id: null, // Pas encore associé à un match
@@ -410,7 +410,7 @@ export default function TournamentManagementPage() {
       }
 
       const { error: deckError } = await supabase
-        .from('oficial_matches_decks')
+        .from('official_matches_decks') // ✅ CORRIGÉ
         .insert(deckData)
 
       if (deckError) throw deckError
