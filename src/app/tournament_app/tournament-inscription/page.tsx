@@ -18,6 +18,7 @@ interface Player {
   player_id: string;
   player_name: string;
   user_id: string;
+  Admin?: boolean;
 }
 
 interface Tournament {
@@ -61,12 +62,14 @@ type Bey = {
   assistType?: string;
   lockChip?: string;
   lockChipType?: string;
-  existingComboId?: string; // Track if this is an existing combo
+  existingComboId?: string;
 };
 
 export default function TournamentInscriptionPage() {
   const router = useRouter();
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
+  const [isAdmin, setIsAdmin] = useState<boolean>(false);
+  const [allPlayers, setAllPlayers] = useState<Player[]>([]);
   
   useEffect(() => {
     const checkAuth = async () => {
@@ -85,9 +88,19 @@ export default function TournamentInscriptionPage() {
 
       if (playerData) {
         setCurrentPlayer(playerData);
+        setIsAdmin(playerData.Admin === true);
       } else {
         console.error("Player not found for user");
         router.push("/");
+      }
+
+      // If admin, fetch all players for selection
+      if (playerData?.Admin) {
+        const { data: allPlayersData } = await supabase
+          .from("players")
+          .select("*")
+          .order("player_name");
+        if (allPlayersData) setAllPlayers(allPlayersData);
       }
     };
 
@@ -102,6 +115,7 @@ export default function TournamentInscriptionPage() {
 
   const [selectedTournament, setSelectedTournament] = useState<string | null>(null);
   const [tournamentDetails, setTournamentDetails] = useState<Tournament | null>(null);
+  const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
 
   // Pièces
   const [blades, setBlades] = useState<{ blade_id: string; name: string; type?: string }[]>([]);
@@ -136,17 +150,20 @@ export default function TournamentInscriptionPage() {
     fetchPieces();
   }, []);
 
+  // Determine which player to use (current user or admin selection)
+  const targetPlayerId = isAdmin ? selectedPlayer : currentPlayer?.player_id;
+
   const handleTournamentSelect = async (tournamentId: string) => {
     setSelectedTournament(tournamentId);
     const details = tournaments.find((t) => t.tournament_id === tournamentId) || null;
     setTournamentDetails(details);
 
-    if (details && currentPlayer) {
-      // Check if user is already registered for this tournament
+    if (details && targetPlayerId) {
+      // Check if player is already registered for this tournament
       const { data: participantData } = await supabase
         .from("tournament_participants")
         .select("*")
-        .eq("player_id", currentPlayer.player_id)
+        .eq("player_id", targetPlayerId)
         .eq("tournament_id", tournamentId)
         .single();
 
@@ -219,14 +236,11 @@ export default function TournamentInscriptionPage() {
     setSelectedComboCount(count);
     
     if (count > 0) {
-      // Initialize the beys array, preserving existing combos where possible
       const newBeys: Bey[] = [];
       for (let i = 0; i < count; i++) {
         if (i < beys.length && beys[i].existingComboId) {
-          // Keep existing combo
           newBeys.push(beys[i]);
         } else {
-          // New empty bey
           newBeys.push({ cx: false });
         }
       }
@@ -242,7 +256,6 @@ export default function TournamentInscriptionPage() {
       newBeys[index] = {
         ...newBeys[index],
         cx: value,
-        // Clear CX-specific pieces when switching from CX to non-CX
         ...(value === false ? { assist: undefined, lockChip: undefined } : {})
       };
       return newBeys;
@@ -258,18 +271,15 @@ export default function TournamentInscriptionPage() {
     newBeys[index] = {
       ...newBeys[index],
       [type]: value,
-      // Remove existingComboId when modifying a piece (becomes a new combo)
       existingComboId: undefined
     };
 
     setBeys(newBeys);
   };
 
-  // Function to generate combo name from selected parts
   const generateComboName = (bey: Bey): string => {
     const parts: string[] = [];
 
-    // Get the names of selected parts
     if (bey.blade) {
       const blade = blades.find(b => b.blade_id === bey.blade);
       if (blade) parts.push(blade.name);
@@ -296,23 +306,20 @@ export default function TournamentInscriptionPage() {
       }
     }
 
-    // If we have all required parts, create the name
     if (parts.length > 0) {
       return parts.join('-');
     }
 
-    // Fallback if no parts selected yet
     return "Nouveau Combo";
   };
 
-  // Function to get current combo name for display
   const getCurrentComboName = (bey: Bey, index: number): string => {
     const baseName = generateComboName(bey);
     return baseName === "Nouveau Combo" ? `Combo ${index + 1}` : `Combo ${index + 1} - ${baseName}`;
   };
 
   const handleSubmit = async () => {
-    if (!currentPlayer || !selectedTournament) {
+    if (!targetPlayerId || !selectedTournament) {
       alert("Erreur d'authentification ou tournoi non sélectionné !");
       return;
     }
@@ -397,7 +404,7 @@ export default function TournamentInscriptionPage() {
       } else {
         // Create new deck and registration
         const deckInsert: Record<string, string> = {
-          player_id: currentPlayer.player_id,
+          player_id: targetPlayerId,
           tournament_id: selectedTournament,
         };
         comboIds.forEach((id, idx) => {
@@ -414,7 +421,7 @@ export default function TournamentInscriptionPage() {
         const { error: participantError } = await supabase
           .from("tournament_participants")
           .insert({
-            player_id: currentPlayer.player_id,
+            player_id: targetPlayerId,
             tournament_id: selectedTournament,
             tournament_deck: deck.deck_id,
             is_validated: false,
@@ -443,7 +450,7 @@ export default function TournamentInscriptionPage() {
   const handleCancelRegistration = async () => {
     if (!existingParticipant || !existingDeck) return;
 
-    if (confirm("Êtes-vous sûr de vouloir annuler votre inscription à ce tournoi ?")) {
+    if (confirm("Êtes-vous sûr de vouloir annuler cette inscription ?")) {
       try {
         // Delete participant
         const { error: participantError } = await supabase
@@ -495,12 +502,35 @@ export default function TournamentInscriptionPage() {
       <div className="mb-6 flex justify-between items-center">
         <div className="text-sm text-gray-300">
           Connecté en tant que : <span className="font-semibold text-purple-300">{currentPlayer.player_name}</span>
+          {isAdmin && <span className="ml-2 px-2 py-1 bg-red-600 rounded text-xs">ADMIN</span>}
         </div>
         <MainMenuButton />
       </div>
       <h1 className="text-4xl font-extrabold mb-8 text-center tracking-wide text-purple-400">
         🚀 Inscription Tournoi
       </h1>
+
+      {/* Admin Player Selection */}
+      {isAdmin && (
+        <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-red-500 shadow-lg">
+          <label className="block mb-3 font-semibold text-red-300">👑 Sélection du Joueur (Admin) :</label>
+          <Select onValueChange={setSelectedPlayer} value={selectedPlayer || undefined}>
+            <SelectTrigger className="bg-gray-900 border border-red-600">
+              <SelectValue placeholder="Choisir un joueur" />
+            </SelectTrigger>
+            <SelectContent className="bg-gray-900 text-white">
+              {allPlayers.map(p => (
+                <SelectItem key={p.player_id} value={p.player_id}>
+                  {p.player_name} {p.Admin && "👑"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <p className="mt-2 text-sm text-red-200">
+            Mode Admin : Vous pouvez inscrire n'importe quel joueur
+          </p>
+        </div>
+      )}
 
       {/* Sélection du tournoi */}
       <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-purple-500 shadow-lg">
@@ -529,7 +559,7 @@ export default function TournamentInscriptionPage() {
           {existingParticipant && (
             <div className="mt-3 p-3 bg-yellow-600/20 rounded-lg border border-yellow-500">
               <p className="text-yellow-300 font-semibold">
-                ✅ Vous êtes déjà inscrit à ce tournoi
+                ✅ {isAdmin ? "Le joueur est déjà inscrit" : "Vous êtes déjà inscrit"} à ce tournoi
                 {existingParticipant.is_validated && " (Validé)"}
               </p>
             </div>
@@ -562,7 +592,7 @@ export default function TournamentInscriptionPage() {
             Choisissez entre 1 et {tournamentDetails.max_combos} combo(s) pour ce tournoi
             {existingParticipant?.is_validated && (
               <span className="block text-red-300 mt-1">
-                ⚠️ Votre inscription est validée, vous ne pouvez plus modifier le nombre de combos
+                ⚠️ L'inscription est validée, vous ne pouvez plus modifier le nombre de combos
               </span>
             )}
           </p>
@@ -656,15 +686,15 @@ export default function TournamentInscriptionPage() {
           <Button
             onClick={handleCancelRegistration}
             className="flex-1 py-3 text-lg font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg transition-all duration-200"
-            disabled={existingParticipant?.is_validated}
+            disabled={existingParticipant?.is_validated && !isAdmin}
           >
-            ❌ Annuler l&apos;inscription
+            ❌ {isAdmin ? "Annuler l'inscription" : "Se désinscrire"}
           </Button>
         )}
         
         <Button
           onClick={handleSubmit}
-          disabled={!selectedTournament || selectedComboCount === 0 || existingParticipant?.is_validated}
+          disabled={!selectedTournament || selectedComboCount === 0 || (existingParticipant?.is_validated && !isAdmin)}
           className="flex-1 py-3 text-lg font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg transition-all duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed"
         >
           {existingParticipant ? "💾 Modifier le Deck" : "⚡ S'inscrire maintenant"}
@@ -674,8 +704,13 @@ export default function TournamentInscriptionPage() {
       {existingParticipant?.is_validated && (
         <div className="mt-4 p-4 bg-green-600/20 rounded-lg border border-green-500">
           <p className="text-green-300 text-center">
-            ✅ Votre inscription est validée et ne peut plus être modifiée
+            ✅ L'inscription est validée {!isAdmin && "et ne peut plus être modifiée"}
           </p>
+          {isAdmin && (
+            <p className="text-yellow-300 text-center text-sm mt-1">
+              👑 Mode Admin : Vous pouvez toujours modifier cette inscription
+            </p>
+          )}
         </div>
       )}
     </div>
