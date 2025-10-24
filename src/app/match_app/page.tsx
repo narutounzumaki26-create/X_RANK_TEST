@@ -941,7 +941,7 @@ export default function OfficialMatch() {
               </div>
             )}
 
-            {/* Beys */}
+            {/* Beys - FIXED SECTION */}
             {selectedComboCount > 0 && beys.slice(0, selectedComboCount).map((bey, index) => (
               <div
                 key={`bey-${index}-${bey.existingComboId || 'new'}`}
@@ -976,34 +976,34 @@ export default function OfficialMatch() {
                 <div className="grid grid-cols-1 gap-2">
                   {(bey.cx
                     ? [
-                        { key: "lockChip", options: lockChips, label: "Lock Chip" },
-                        { key: "blade", options: blades, label: "Blade" },
-                        { key: "assist", options: assists, label: "Assist" },
-                        { key: "ratchet", options: ratchets, label: "Ratchet" },
-                        { key: "bit", options: bits, label: "Bit" },
+                        { key: "lockChip" as const, options: lockChips, label: "Lock Chip" },
+                        { key: "blade" as const, options: blades, label: "Blade" },
+                        { key: "assist" as const, options: assists, label: "Assist" },
+                        { key: "ratchet" as const, options: ratchets, label: "Ratchet" },
+                        { key: "bit" as const, options: bits, label: "Bit" },
                       ]
                     : [
-                        { key: "blade", options: blades, label: "Blade" },
-                        { key: "ratchet", options: ratchets, label: "Ratchet" },
-                        { key: "bit", options: bits, label: "Bit" },
+                        { key: "blade" as const, options: blades, label: "Blade" },
+                        { key: "ratchet" as const, options: ratchets, label: "Ratchet" },
+                        { key: "bit" as const, options: bits, label: "Bit" },
                       ]
                   ).map(({ key, options, label }) => {
-                    const pieceKey = key as keyof Bey
-                    const selectedValue = bey[pieceKey] ?? ""
+                    // Ensure selectedValue is always a string or undefined
+                    const selectedValue = bey[key] || ""
 
                     return (
                       <select
-                        key={pieceKey}
+                        key={key}
                         value={selectedValue}
-                        onChange={(e) => handleBeyPieceSelect(index, pieceKey, e.target.value)}
+                        onChange={(e) => handleBeyPieceSelect(index, key, e.target.value)}
                         className="bg-gray-900 border border-pink-600 rounded p-2 text-white text-sm"
                       >
                         <option value="">{label}</option>
                         {options.map(o => {
                           const idKey =
-                            pieceKey === "lockChip"
+                            key === "lockChip"
                               ? "lock_chip_id"
-                              : `${pieceKey}_id`
+                              : `${key}_id`
                           const optionValue = o[idKey as keyof typeof o] as string
                           return (
                             <option key={optionValue} value={optionValue}>
