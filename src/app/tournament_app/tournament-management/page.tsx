@@ -23,6 +23,22 @@ type RoundLog = {
   loserCombo: string
 }
 
+// Type for match data to be inserted
+type MatchInsertData = {
+  tournament_id: string | null;
+  player1_id: string | null;
+  player2_id: string | null;
+  winner_id: string | null;
+  loser_id: string | null;
+  rounds: number;
+  created_by: string | null;
+  match_logs: string | null;
+  spin_finishes: number | null;
+  over_finishes: number | null;
+  burst_finishes: number | null;
+  xtreme_finishes: number | null;
+};
+
 export default function TournamentManagementPage() {
   const router = useRouter()
 
@@ -49,6 +65,7 @@ export default function TournamentManagementPage() {
   const [selectedCombo1, setSelectedCombo1] = useState<string>('')
   const [selectedCombo2, setSelectedCombo2] = useState<string>('')
   const [matchValidated, setMatchValidated] = useState(false)
+  const [createdMatchId, setCreatedMatchId] = useState<string | null>(null)
 
   const playerColors: Record<1 | 2, string> = { 1: 'bg-blue-600', 2: 'bg-red-500' }
 
@@ -188,6 +205,7 @@ export default function TournamentManagementPage() {
     setRound(0)
     setRoundLogs([])
     setMatchValidated(false)
+    setCreatedMatchId(null)
   }
 
   const getComboName = useCallback(
@@ -223,11 +241,101 @@ export default function TournamentManagementPage() {
   }
 
   // ======================================================
-  // 📊 Update stats
+  // 🗄️ Match Creation & Database Storage
   // ======================================================
-  const updatePlayerStats = async () => {
+  const createMatchInDatabase = async (): Promise<string | null> => {
+    if (!selectedTournament || !selectedPlayer1 || !selectedPlayer2 || round === 0) {
+      alert('Impossible de créer le match: données manquantes')
+      return null
+    }
+
+    // Determine winner and loser
+    let winner_id: string | null = null
+    let loser_id: string | null = null
+    
+    if (player1Score > player2Score) {
+      winner_id = selectedPlayer1
+      loser_id = selectedPlayer2
+    } else if (player2Score > player1Score) {
+      winner_id = selectedPlayer2
+      loser_id = selectedPlayer1
+    }
+    // If draw, both winner_id and loser_id remain null
+
+    // Count finish types
+    const spinFinishes = roundLogs.filter(log => log.action === 'Spin').length
+    const overFinishes = roundLogs.filter(log => log.action === 'Over').length
+    const burstFinishes = roundLogs.filter(log => log.action === 'Burst').length
+    const xtremeFinishes = roundLogs.filter(log => log.action === 'Xtreme').length
+
+    // Get current user for created_by
+    const { data: { user } } = await supabase.auth.getUser()
+    const created_by = user?.id || null
+
+    // Format match logs as JSON string
+    const formattedLogs = JSON.stringify(roundLogs.map(log => ({
+      round: log.round,
+      player: log.player,
+      action: log.action,
+      points: log.points,
+      winner_combo: log.winnerCombo,
+      loser_combo: log.loserCombo,
+      timestamp: new Date().toISOString()
+    })), null, 2)
+
+    // Prepare match data
+    const matchData: MatchInsertData = {
+      tournament_id: selectedTournament,
+      player1_id: selectedPlayer1,
+      player2_id: selectedPlayer2,
+      winner_id: winner_id,
+      loser_id: loser_id,
+      rounds: round,
+      created_by: created_by,
+      match_logs: formattedLogs,
+      spin_finishes: spinFinishes,
+      over_finishes: overFinishes,
+      burst_finishes: burstFinishes,
+      xtreme_finishes: xtremeFinishes,
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('matches')
+        .insert([matchData])
+        .select('match_id')
+        .single()
+
+      if (error) {
+        console.error('Erreur lors de la création du match:', error)
+        alert(`Erreur: ${error.message}`)
+        return null
+      }
+
+      console.log('✅ Match créé avec succès, ID:', data.match_id)
+      return data.match_id
+    } catch (error) {
+      console.error('Exception lors de la création du match:', error)
+      return null
+    }
+  }
+
+  // ======================================================
+  // 📊 Update stats and create match
+  // ======================================================
+  const updatePlayerStatsAndCreateMatch = async () => {
     if (!selectedPlayer1 || !selectedPlayer2) return
 
+    // First create the match in database
+    const matchId = await createMatchInDatabase()
+    if (!matchId) {
+      alert('Échec de la création du match dans la base de données')
+      return
+    }
+
+    setCreatedMatchId(matchId)
+
+    // Then update player stats
     const statsInit: Omit<player_stats, 'player_id'> = {
       matches_played: 1,
       matches_won: 0,
@@ -298,6 +406,8 @@ export default function TournamentManagementPage() {
     await applyStats(selectedPlayer1, statsP1)
     await applyStats(selectedPlayer2, statsP2)
     setMatchValidated(true)
+    
+    alert(`✅ Match enregistré avec succès! ID: ${matchId}`)
   }
 
   // ======================================================
@@ -459,19 +569,19 @@ export default function TournamentManagementPage() {
       {!matchValidated && round > 0 && (
         <button
           className="w-full py-3 text-lg font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg transition-all duration-200 mb-4"
-          onClick={updatePlayerStats}
+          onClick={updatePlayerStatsAndCreateMatch}
         >
-          ✅ Valider le match
+          ✅ Valider et enregistrer le match
         </button>
       )}
 
-      {matchValidated && (
-        <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-blue-500 shadow-md">
-          <h2 className="text-xl font-bold mb-2 text-blue-300">Rapport du match</h2>
-          <p>
+      {matchValidated && createdMatchId && (
+        <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-green-500 shadow-md">
+          <h2 className="text-xl font-bold mb-2 text-green-300">Match enregistré !</h2>
+          <p className="mb-2">
             Score final : {player1Name} {player1Score} - {player2Score} {player2Name}
           </p>
-          <p>
+          <p className="mb-2">
             Vainqueur :{' '}
             {player1Score > player2Score
               ? player1Name
@@ -479,9 +589,12 @@ export default function TournamentManagementPage() {
               ? player2Name
               : 'Égalité'}
           </p>
+          <p className="text-sm text-gray-300 mb-4">
+            ID du match : {createdMatchId}
+          </p>
           <button
             onClick={resetMatch}
-            className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl mt-4 font-bold shadow-lg transition-all duration-200"
+            className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl mt-2 font-bold shadow-lg transition-all duration-200"
           >
             🔁 Nouveau match
           </button>
