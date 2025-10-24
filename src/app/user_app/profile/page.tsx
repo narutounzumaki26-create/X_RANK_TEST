@@ -23,6 +23,7 @@ type Match = {
   over_finishes2: number | null
   burst_finishes2: number | null
   xtreme_finishes2: number | null
+  created_at?: string
   tournaments?: {
     name: string
   }
@@ -75,31 +76,57 @@ export default function ProfileStatsPage() {
   const [loading, setLoading] = useState(true)
 
   // ======================================================
-  // 📊 Récupération des matches du joueur
+  // 📊 Récupération des matches du joueur - CORRIGÉ
   // ======================================================
   const fetchPlayerMatches = useCallback(async (pId: string) => {
     setLoading(true)
+    console.log('🔍 Recherche des matches pour le joueur:', pId)
     
-    const { data: matchesData, error } = await supabase
-      .from('matches')
-      .select(`
-        *,
-        tournaments:tournament_id (name),
-        player1:player1_id (player_name),
-        player2:player2_id (player_name)
-      `)
-      .or(`player1_id.eq.${pId},player2_id.eq.${pId}`)
-      .order('created_at', { ascending: false })
+    try {
+      // Essayer d'abord avec created_at, sinon sans ordering
+      let query = supabase
+        .from('matches')
+        .select(`
+          *,
+          tournaments:tournament_id (name),
+          player1:player1_id (player_name),
+          player2:player2_id (player_name)
+        `)
+        .or(`player1_id.eq.${pId},player2_id.eq.${pId}`)
 
-    if (error) {
-      console.error('Erreur lors de la récupération des matches:', error)
+      // Vérifier si created_at existe en essayant d'ajouter le tri
+      const { data: matchesData, error } = await query
+
+      if (error) {
+        console.error('❌ Erreur lors de la récupération des matches:', error)
+        
+        // Essayer sans les relations si ça échoue
+        const { data: simpleData, error: simpleError } = await supabase
+          .from('matches')
+          .select('*')
+          .or(`player1_id.eq.${pId},player2_id.eq.${pId}`)
+
+        if (simpleError) {
+          console.error('❌ Erreur même avec requête simple:', simpleError)
+          setMatches([])
+          calculateStats([], pId)
+        } else {
+          console.log('✅ Matches récupérés (sans relations):', simpleData?.length)
+          setMatches(simpleData || [])
+          calculateStats(simpleData || [], pId)
+        }
+      } else {
+        console.log('✅ Matches récupérés:', matchesData?.length)
+        setMatches(matchesData || [])
+        calculateStats(matchesData || [], pId)
+      }
+    } catch (error) {
+      console.error('❌ Exception lors de la récupération:', error)
+      setMatches([])
+      calculateStats([], pId)
+    } finally {
       setLoading(false)
-      return
     }
-
-    setMatches(matchesData || [])
-    calculateStats(matchesData || [], pId)
-    setLoading(false)
   }, [])
 
   // ======================================================
@@ -107,19 +134,34 @@ export default function ProfileStatsPage() {
   // ======================================================
   useEffect(() => {
     const getCurrentPlayer = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
+      try {
+        const { data: { user } } = await supabase.auth.getUser()
+        if (!user) {
+          console.log('❌ Aucun utilisateur connecté')
+          return
+        }
 
-      const { data: player } = await supabase
-        .from('players')
-        .select('player_id, player_name')
-        .eq('user_id', user.id)
-        .single()
+        console.log('👤 Utilisateur connecté:', user.id)
 
-      if (player) {
-        setPlayerId(player.player_id)
-        setPlayerName(player.player_name)
-        fetchPlayerMatches(player.player_id)
+        const { data: player, error } = await supabase
+          .from('players')
+          .select('player_id, player_name')
+          .eq('user_id', user.id)
+          .single()
+
+        if (error) {
+          console.error('❌ Erreur récupération joueur:', error)
+          return
+        }
+
+        if (player) {
+          console.log('🎯 Joueur trouvé:', player.player_name, player.player_id)
+          setPlayerId(player.player_id)
+          setPlayerName(player.player_name)
+          fetchPlayerMatches(player.player_id)
+        }
+      } catch (error) {
+        console.error('❌ Exception récupération joueur:', error)
       }
     }
 
@@ -130,6 +172,8 @@ export default function ProfileStatsPage() {
   // 🧮 Calcul des statistiques
   // ======================================================
   const calculateStats = (playerMatches: Match[], pId: string) => {
+    console.log('🧮 Calcul des stats pour', playerMatches.length, 'matches')
+    
     const totalMatches = playerMatches.length
     let wins = 0
     let losses = 0
@@ -148,13 +192,18 @@ export default function ProfileStatsPage() {
       const isPlayer1 = match.player1_id === pId
       const isPlayer2 = match.player2_id === pId
       
+      console.log(`📊 Match ${match.match_id}: P1=${isPlayer1}, P2=${isPlayer2}, Winner=${match.winner_id}`)
+      
       // Compter wins/losses/draws
       if (match.winner_id === pId) {
         wins++
+        console.log('✅ Victoire comptée')
       } else if (match.loser_id === pId) {
         losses++
+        console.log('❌ Défaite comptée')
       } else if (match.winner_id === null && match.loser_id === null) {
         draws++
+        console.log('⚡ Égalité comptée')
       }
 
       // Compter les rounds
@@ -169,6 +218,7 @@ export default function ProfileStatsPage() {
         
         totalFinishes += (match.spin_finishes || 0) + (match.over_finishes || 0) + 
                         (match.burst_finishes || 0) + (match.xtreme_finishes || 0)
+        console.log(`🎯 Finishes P1: Spin=${match.spin_finishes}, Over=${match.over_finishes}, Burst=${match.burst_finishes}, Xtreme=${match.xtreme_finishes}`)
       } else if (isPlayer2) {
         spinFinishes += match.spin_finishes2 || 0
         overFinishes += match.over_finishes2 || 0
@@ -177,12 +227,14 @@ export default function ProfileStatsPage() {
         
         totalFinishes += (match.spin_finishes2 || 0) + (match.over_finishes2 || 0) + 
                         (match.burst_finishes2 || 0) + (match.xtreme_finishes2 || 0)
+        console.log(`🎯 Finishes P2: Spin=${match.spin_finishes2}, Over=${match.over_finishes2}, Burst=${match.burst_finishes2}, Xtreme=${match.xtreme_finishes2}`)
       }
 
       // Analyser les logs pour l'usage des combos
       if (match.match_logs) {
         try {
           const logs: MatchLog[] = JSON.parse(match.match_logs)
+          console.log(`📝 ${logs.length} logs trouvés pour ce match`)
           logs.forEach(log => {
             if (log.player === (isPlayer1 ? 1 : 2)) {
               // Usage des combos
@@ -194,8 +246,10 @@ export default function ProfileStatsPage() {
             }
           })
         } catch (e) {
-          console.error('Erreur parsing match logs:', e)
+          console.error('❌ Erreur parsing match logs:', e)
         }
+      } else {
+        console.log('📝 Aucun log pour ce match')
       }
     })
 
@@ -236,6 +290,7 @@ export default function ProfileStatsPage() {
       most_used_combo: mostUsedCombo
     }
 
+    console.log('📈 Statistiques calculées:', calculatedStats)
     setStats(calculatedStats)
   }
 
@@ -248,11 +303,13 @@ export default function ProfileStatsPage() {
         const logs: MatchLog[] = JSON.parse(match.match_logs)
         setSelectedMatchLogs(logs)
         setSelectedMatchId(match.match_id)
+        console.log('📋 Logs affichés:', logs.length)
       } catch (e) {
-        console.error('Erreur parsing match logs:', e)
+        console.error('❌ Erreur parsing match logs:', e)
         setSelectedMatchLogs([])
       }
     } else {
+      console.log('📋 Aucun log disponible')
       setSelectedMatchLogs([])
     }
   }
@@ -284,73 +341,86 @@ export default function ProfileStatsPage() {
         <div className="bg-gray-800 rounded-xl p-6 mb-8 border border-purple-500">
           <h2 className="text-2xl font-bold mb-4 text-purple-300">👤 {playerName}</h2>
           <p className="text-gray-300">ID: {playerId}</p>
+          <p className="text-gray-400 text-sm mt-2">
+            {matches.length} match(s) trouvé(s) dans la base de données
+          </p>
         </div>
 
         {/* Statistiques */}
-        {stats && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            {/* Carte Victoires */}
-            <div className="bg-green-600 rounded-xl p-6 text-center shadow-lg">
-              <div className="text-3xl font-bold">{stats.wins}</div>
-              <div className="text-green-200">Victoires</div>
-              <div className="text-sm text-green-300 mt-2">{stats.win_rate}% de win rate</div>
+        {stats && stats.total_matches > 0 ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              {/* Carte Victoires */}
+              <div className="bg-green-600 rounded-xl p-6 text-center shadow-lg">
+                <div className="text-3xl font-bold">{stats.wins}</div>
+                <div className="text-green-200">Victoires</div>
+                <div className="text-sm text-green-300 mt-2">{stats.win_rate}% de win rate</div>
+              </div>
+
+              {/* Carte Défaites */}
+              <div className="bg-red-600 rounded-xl p-6 text-center shadow-lg">
+                <div className="text-3xl font-bold">{stats.losses}</div>
+                <div className="text-red-200">Défaites</div>
+                <div className="text-sm text-red-300 mt-2">{stats.draws} matchs nuls</div>
+              </div>
+
+              {/* Carte Finishes */}
+              <div className="bg-blue-600 rounded-xl p-6 text-center shadow-lg">
+                <div className="text-3xl font-bold">{stats.total_finishes}</div>
+                <div className="text-blue-200">Finishes totaux</div>
+                <div className="text-sm text-blue-300 mt-2">Finish préféré: {stats.favorite_finish}</div>
+              </div>
+
+              {/* Carte Rounds */}
+              <div className="bg-yellow-600 rounded-xl p-6 text-center shadow-lg">
+                <div className="text-3xl font-bold">{stats.total_rounds}</div>
+                <div className="text-yellow-200">Rounds joués</div>
+                <div className="text-sm text-yellow-300 mt-2">{stats.average_rounds_per_match} rounds/match</div>
+              </div>
             </div>
 
-            {/* Carte Défaites */}
-            <div className="bg-red-600 rounded-xl p-6 text-center shadow-lg">
-              <div className="text-3xl font-bold">{stats.losses}</div>
-              <div className="text-red-200">Défaites</div>
-              <div className="text-sm text-red-300 mt-2">{stats.draws} matchs nuls</div>
-            </div>
-
-            {/* Carte Finishes */}
-            <div className="bg-blue-600 rounded-xl p-6 text-center shadow-lg">
-              <div className="text-3xl font-bold">{stats.total_finishes}</div>
-              <div className="text-blue-200">Finishes totaux</div>
-              <div className="text-sm text-blue-300 mt-2">Finish préféré: {stats.favorite_finish}</div>
-            </div>
-
-            {/* Carte Rounds */}
-            <div className="bg-yellow-600 rounded-xl p-6 text-center shadow-lg">
-              <div className="text-3xl font-bold">{stats.total_rounds}</div>
-              <div className="text-yellow-200">Rounds joués</div>
-              <div className="text-sm text-yellow-300 mt-2">{stats.average_rounds_per_match} rounds/match</div>
-            </div>
-          </div>
-        )}
-
-        {/* Détails des statistiques */}
-        {stats && (
-          <div className="bg-gray-800 rounded-xl p-6 mb-8 border border-blue-500">
-            <h3 className="text-2xl font-bold mb-4 text-blue-300">📈 Détails des Statistiques</h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <div className="text-center">
-                <div className="text-lg font-semibold">Matches</div>
-                <div className="text-2xl text-purple-400">{stats.total_matches}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-semibold">Spin Finishes</div>
-                <div className="text-2xl text-blue-400">{stats.spin_finishes}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-semibold">Over Finishes</div>
-                <div className="text-2xl text-green-400">{stats.over_finishes}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-semibold">Burst Finishes</div>
-                <div className="text-2xl text-red-400">{stats.burst_finishes}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-semibold">Xtreme Finishes</div>
-                <div className="text-2xl text-yellow-400">{stats.xtreme_finishes}</div>
-              </div>
-              <div className="text-center">
-                <div className="text-lg font-semibold">Combo favori</div>
-                <div className="text-lg text-pink-400 truncate" title={stats.most_used_combo}>
-                  {stats.most_used_combo}
+            {/* Détails des statistiques */}
+            <div className="bg-gray-800 rounded-xl p-6 mb-8 border border-blue-500">
+              <h3 className="text-2xl font-bold mb-4 text-blue-300">📈 Détails des Statistiques</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div className="text-center">
+                  <div className="text-lg font-semibold">Matches</div>
+                  <div className="text-2xl text-purple-400">{stats.total_matches}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-semibold">Spin Finishes</div>
+                  <div className="text-2xl text-blue-400">{stats.spin_finishes}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-semibold">Over Finishes</div>
+                  <div className="text-2xl text-green-400">{stats.over_finishes}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-semibold">Burst Finishes</div>
+                  <div className="text-2xl text-red-400">{stats.burst_finishes}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-semibold">Xtreme Finishes</div>
+                  <div className="text-2xl text-yellow-400">{stats.xtreme_finishes}</div>
+                </div>
+                <div className="text-center">
+                  <div className="text-lg font-semibold">Combo favori</div>
+                  <div className="text-lg text-pink-400 truncate" title={stats.most_used_combo}>
+                    {stats.most_used_combo}
+                  </div>
                 </div>
               </div>
             </div>
+          </>
+        ) : (
+          <div className="bg-gray-800 rounded-xl p-8 mb-8 border border-yellow-500 text-center">
+            <h3 className="text-2xl font-bold mb-4 text-yellow-300">📊 Aucune statistique disponible</h3>
+            <p className="text-gray-300 mb-4">
+              Vous n'avez pas encore joué de matchs enregistrés dans le système.
+            </p>
+            <p className="text-gray-400 text-sm">
+              Les statistiques apparaîtront ici après votre premier match.
+            </p>
           </div>
         )}
 
@@ -376,7 +446,7 @@ export default function ProfileStatsPage() {
                   <div className="flex justify-between items-center">
                     <div className="flex-1">
                       <div className="font-semibold">
-                        {match.player1?.player_name} vs {match.player2?.player_name}
+                        {match.player1?.player_name || 'Joueur 1'} vs {match.player2?.player_name || 'Joueur 2'}
                       </div>
                       <div className="text-sm text-gray-300">
                         Tournoi: {match.tournaments?.name || 'N/A'} • Rounds: {match.rounds}
