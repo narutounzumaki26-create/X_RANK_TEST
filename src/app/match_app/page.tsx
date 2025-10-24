@@ -189,7 +189,7 @@ export default function OfficialMatch() {
       if (!playerId) return
       
       const { data, error } = await supabase
-        .from('official_matches_decks')
+        .from('official_matchs_decks')
         .select('*')
         .eq('player_id', playerId)
         .order('Date_Creation', { ascending: false })
@@ -468,7 +468,7 @@ export default function OfficialMatch() {
     if (playerId) {
       // Check for existing deck
       const { data: deckData } = await supabase
-        .from('official_matches_decks')
+        .from('official_matchs_decks')
         .select('*')
         .eq('player_id', playerId)
         .order('Date_Creation', { ascending: false })
@@ -685,7 +685,7 @@ export default function OfficialMatch() {
         })
 
         const { error: deckError } = await supabase
-          .from("official_matches_decks")
+          .from("official_matchs_decks")
           .update(deckUpdate)
           .eq("deck_id", existingDeck.deck_id)
 
@@ -702,7 +702,7 @@ export default function OfficialMatch() {
         })
 
         const { data: deck, error: deckError } = await supabase
-          .from("official_matches_decks")
+          .from("official_matchs_decks")
           .insert(deckInsert)
           .select()
           .single()
