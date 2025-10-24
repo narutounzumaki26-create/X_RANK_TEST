@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { MainMenuButton } from '@/components/navigation/MainMenuButton'
 
@@ -75,33 +75,9 @@ export default function ProfileStatsPage() {
   const [loading, setLoading] = useState(true)
 
   // ======================================================
-  // 🔍 Récupération du joueur connecté
-  // ======================================================
-  useEffect(() => {
-    const getCurrentPlayer = async () => {
-      const { data: { user } } = await supabase.auth.getUser()
-      if (!user) return
-
-      const { data: player } = await supabase
-        .from('players')
-        .select('player_id, player_name')
-        .eq('user_id', user.id)
-        .single()
-
-      if (player) {
-        setPlayerId(player.player_id)
-        setPlayerName(player.player_name)
-        fetchPlayerMatches(player.player_id)
-      }
-    }
-
-    getCurrentPlayer()
-  }, [])
-
-  // ======================================================
   // 📊 Récupération des matches du joueur
   // ======================================================
-  const fetchPlayerMatches = async (pId: string) => {
+  const fetchPlayerMatches = useCallback(async (pId: string) => {
     setLoading(true)
     
     const { data: matchesData, error } = await supabase
@@ -124,13 +100,37 @@ export default function ProfileStatsPage() {
     setMatches(matchesData || [])
     calculateStats(matchesData || [], pId)
     setLoading(false)
-  }
+  }, [])
+
+  // ======================================================
+  // 🔍 Récupération du joueur connecté
+  // ======================================================
+  useEffect(() => {
+    const getCurrentPlayer = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: player } = await supabase
+        .from('players')
+        .select('player_id, player_name')
+        .eq('user_id', user.id)
+        .single()
+
+      if (player) {
+        setPlayerId(player.player_id)
+        setPlayerName(player.player_name)
+        fetchPlayerMatches(player.player_id)
+      }
+    }
+
+    getCurrentPlayer()
+  }, [fetchPlayerMatches])
 
   // ======================================================
   // 🧮 Calcul des statistiques
   // ======================================================
   const calculateStats = (playerMatches: Match[], pId: string) => {
-    let totalMatches = playerMatches.length
+    const totalMatches = playerMatches.length
     let wins = 0
     let losses = 0
     let draws = 0
