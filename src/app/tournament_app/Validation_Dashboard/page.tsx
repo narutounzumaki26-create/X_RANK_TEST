@@ -5,7 +5,6 @@ import { supabase } from "@/lib/supabaseClient";
 import { MainMenuButton } from "@/components/navigation/MainMenuButton";
 
 interface TournamentParticipant {
-  participant_id: string;
   player_id: string;
   tournament_id: string;
   is_validated: boolean;
@@ -28,6 +27,7 @@ export default function ParticipantValidationDashboard() {
   const [loading, setLoading] = useState(true);
   const [isAdmin, setIsAdmin] = useState(false);
   const [filter, setFilter] = useState<FilterType>("all");
+  const [updatingIds, setUpdatingIds] = useState<{player_id: string, tournament_id: string} | null>(null);
 
   useEffect(() => {
     const checkAuthAndAdmin = async () => {
@@ -74,31 +74,92 @@ export default function ParticipantValidationDashboard() {
       setParticipants(participantsData || []);
     } catch (error) {
       console.error("Error fetching participants:", error);
+      alert("Erreur lors du chargement des participants");
     } finally {
       setLoading(false);
     }
   };
 
-  const toggleValidation = async (participantId: string, currentStatus: boolean) => {
+  const toggleValidation = async (player_id: string, tournament_id: string, currentStatus: boolean) => {
     try {
+      setUpdatingIds({player_id, tournament_id});
+      
       const { error } = await supabase
         .from("tournament_participants")
-        .update({ is_validated: !currentStatus })
-        .eq("participant_id", participantId);
+        .update({ 
+          is_validated: !currentStatus
+        })
+        .eq("player_id", player_id)
+        .eq("tournament_id", tournament_id)
+        .select();
 
-      if (error) throw error;
+      if (error) {
+        console.error("Supabase error:", error);
+        throw new Error(error.message || "Erreur de base de données");
+      }
 
       // Update local state
       setParticipants(prev =>
         prev.map(p =>
-          p.participant_id === participantId
+          p.player_id === player_id && p.tournament_id === tournament_id
             ? { ...p, is_validated: !currentStatus }
             : p
         )
       );
+
     } catch (error) {
       console.error("Error updating validation status:", error);
-      alert("Erreur lors de la mise à jour du statut de validation");
+      const errorMessage = error instanceof Error 
+        ? error.message 
+        : "Erreur inconnue lors de la mise à jour";
+      alert(`Erreur lors de la mise à jour: ${errorMessage}`);
+    } finally {
+      setUpdatingIds(null);
+    }
+  };
+
+  const validateAllPending = async () => {
+    try {
+      const pendingParticipants = participants.filter(p => !p.is_validated);
+      
+      if (pendingParticipants.length === 0) {
+        alert("Aucun participant en attente de validation");
+        return;
+      }
+
+      if (!confirm(`Êtes-vous sûr de vouloir valider ${pendingParticipants.length} participant(s) en attente ?`)) {
+        return;
+      }
+
+      // Update each pending participant individually
+      const updatePromises = pendingParticipants.map(participant =>
+        supabase
+          .from("tournament_participants")
+          .update({ is_validated: true })
+          .eq("player_id", participant.player_id)
+          .eq("tournament_id", participant.tournament_id)
+      );
+
+      const results = await Promise.all(updatePromises);
+      
+      // Check for any errors
+      const hasError = results.some(result => result.error);
+      if (hasError) {
+        throw new Error("Certaines validations ont échoué");
+      }
+
+      // Update local state
+      setParticipants(prev =>
+        prev.map(p =>
+          !p.is_validated ? { ...p, is_validated: true } : p
+        )
+      );
+
+      alert(`${pendingParticipants.length} participant(s) validé(s) avec succès !`);
+
+    } catch (error) {
+      console.error("Error validating all:", error);
+      alert("Erreur lors de la validation en masse");
     }
   };
 
@@ -119,6 +180,10 @@ export default function ParticipantValidationDashboard() {
       month: "2-digit",
       year: "numeric"
     });
+  };
+
+  const isUpdating = (player_id: string, tournament_id: string) => {
+    return updatingIds?.player_id === player_id && updatingIds?.tournament_id === tournament_id;
   };
 
   if (!isAdmin) {
@@ -146,7 +211,7 @@ export default function ParticipantValidationDashboard() {
         </div>
 
         {/* Stats and Filters */}
-        <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div className="mb-8 grid grid-cols-1 md:grid-cols-5 gap-6">
           {/* Stats */}
           <div className="bg-gradient-to-r from-purple-600 to-purple-700 rounded-xl p-6 text-center">
             <div className="text-3xl font-bold">{participants.length}</div>
@@ -180,6 +245,20 @@ export default function ParticipantValidationDashboard() {
               <option value="pending">En attente uniquement</option>
             </select>
           </div>
+
+          {/* Bulk Action */}
+          <div className="bg-gray-800 rounded-xl p-6 border border-green-500">
+            <label className="block text-sm font-semibold text-green-300 mb-3">
+              ⚡ Action Groupée
+            </label>
+            <button
+              onClick={validateAllPending}
+              disabled={participants.filter(p => !p.is_validated).length === 0}
+              className="w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white py-2 px-3 rounded-lg font-semibold transition-colors"
+            >
+              ✅ Tout Valider
+            </button>
+          </div>
         </div>
 
         {/* Participants Table */}
@@ -209,7 +288,7 @@ export default function ParticipantValidationDashboard() {
             ) : (
               filteredParticipants.map((participant) => (
                 <div
-                  key={participant.participant_id}
+                  key={`${participant.player_id}-${participant.tournament_id}`}
                   className="px-6 py-4 hover:bg-gray-750 transition-colors"
                 >
                   <div className="grid grid-cols-12 gap-4 items-center">
@@ -259,14 +338,21 @@ export default function ParticipantValidationDashboard() {
                     {/* Actions */}
                     <div className="col-span-1">
                       <button
-                        onClick={() => toggleValidation(participant.participant_id, participant.is_validated)}
-                        className={`w-full py-2 px-3 rounded-lg text-sm font-semibold transition-colors ${
+                        onClick={() => toggleValidation(participant.player_id, participant.tournament_id, participant.is_validated)}
+                        disabled={isUpdating(participant.player_id, participant.tournament_id)}
+                        className={`w-full py-2 px-3 rounded-lg text-sm font-semibold transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
                           participant.is_validated
                             ? "bg-yellow-600 hover:bg-yellow-700 text-white"
                             : "bg-green-600 hover:bg-green-700 text-white"
                         }`}
                       >
-                        {participant.is_validated ? "❌ Invalider" : "✅ Valider"}
+                        {isUpdating(participant.player_id, participant.tournament_id) ? (
+                          "⏳..."
+                        ) : participant.is_validated ? (
+                          "❌ Invalider"
+                        ) : (
+                          "✅ Valider"
+                        )}
                       </button>
                     </div>
                   </div>
@@ -281,12 +367,18 @@ export default function ParticipantValidationDashboard() {
           <h3 className="text-lg font-semibold text-blue-300 mb-4">
             ⚡ Actions Rapides
           </h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
             <button
               onClick={() => setFilter("pending")}
               className="bg-yellow-600 hover:bg-yellow-700 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
             >
               👀 Voir En Attente
+            </button>
+            <button
+              onClick={validateAllPending}
+              className="bg-green-600 hover:bg-green-700 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
+            >
+              ✅ Tout Valider
             </button>
             <button
               onClick={fetchParticipants}
@@ -295,7 +387,7 @@ export default function ParticipantValidationDashboard() {
               🔄 Actualiser
             </button>
             <button
-              onClick={() => router.push('/tournament-management')}
+              onClick={() => router.push('/tournament_app/tournament-inscription')}
               className="bg-blue-600 hover:bg-blue-700 text-white py-3 px-4 rounded-lg font-semibold transition-colors"
             >
               🏆 Gérer Tournois
@@ -310,6 +402,7 @@ export default function ParticipantValidationDashboard() {
             <ul className="mt-2 space-y-1">
               <li>• Cliquez sur &quot;Valider&quot; pour approuver un participant</li>
               <li>• Cliquez sur &quot;Invalider&quot; pour retirer l&apos;approbation</li>
+              <li>• Utilisez &quot;Tout Valider&quot; pour valider tous les participants en attente</li>
               <li>• Utilisez le filtre pour voir les participants en attente</li>
             </ul>
           </div>
@@ -319,6 +412,7 @@ export default function ParticipantValidationDashboard() {
               <li>• {participants.filter(p => p.is_validated).length} participants validés</li>
               <li>• {participants.filter(p => !p.is_validated).length} participants en attente</li>
               <li>• {new Set(participants.map(p => p.tournament_id)).size} tournois actifs</li>
+              <li>• {new Set(participants.map(p => p.player_id)).size} joueurs uniques</li>
             </ul>
           </div>
         </div>
