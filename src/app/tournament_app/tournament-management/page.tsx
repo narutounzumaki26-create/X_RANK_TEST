@@ -23,14 +23,6 @@ type RoundLog = {
   loserCombo: string
 }
 
-// Type pour l'export des combos récents
-type RecentComboExport = {
-  player_name: string
-  combo_name: string
-  combo_id: string
-  last_used: string
-}
-
 export default function TournamentManagementPage() {
   const router = useRouter()
 
@@ -57,12 +49,6 @@ export default function TournamentManagementPage() {
   const [selectedCombo1, setSelectedCombo1] = useState<string>('')
   const [selectedCombo2, setSelectedCombo2] = useState<string>('')
   const [matchValidated, setMatchValidated] = useState(false)
-
-  // ============================
-  // 🔹 Export des combos récents
-  // ============================
-  const [recentCombos, setRecentCombos] = useState<RecentComboExport[]>([])
-  const [showExport, setShowExport] = useState(false)
 
   const playerColors: Record<1 | 2, string> = { 1: 'bg-blue-600', 2: 'bg-red-500' }
 
@@ -151,31 +137,33 @@ export default function TournamentManagementPage() {
   }, [selectedTournament])
 
   // ======================================================
-  // 🧩 Fetch Decks
+  // 🧩 Fetch Decks - METTRE À JOUR POUR PRENDRE LE PLUS RÉCENT
   // ======================================================
   const fetchPlayerDeck = useCallback(
     async (playerId: string, setDeck: (d: tournament_decks | null) => void) => {
       if (!selectedTournament || !playerId) return
+      
+      // Récupérer TOUS les decks du joueur pour ce tournoi, triés par date de création (le plus récent en premier)
       const { data, error } = await supabase
         .from('tournament_decks')
         .select('*')
         .eq('tournament_id', selectedTournament)
         .eq('player_id', playerId)
-        .single<tournament_decks>()
+        .order('created_at', { ascending: false }) // Le plus récent en premier
+        .limit(1) // Prendre seulement le premier (le plus récent)
 
-      if (error) setDeck(null)
-      else setDeck(data)
+      if (error) {
+        console.error('Erreur lors de la récupération du deck:', error)
+        setDeck(null)
+      } else if (data && data.length > 0) {
+        // Prendre le premier deck (le plus récent)
+        setDeck(data[0])
+      } else {
+        setDeck(null)
+      }
     },
     [selectedTournament]
   )
-
-  useEffect(() => {
-    fetchPlayerDeck(selectedPlayer1, setPlayer1Deck)
-  }, [selectedPlayer1, selectedTournament, fetchPlayerDeck])
-
-  useEffect(() => {
-    fetchPlayerDeck(selectedPlayer2, setPlayer2Deck)
-  }, [selectedPlayer2, selectedTournament, fetchPlayerDeck])
 
   // ======================================================
   // 🎯 Fonctions Match
@@ -305,100 +293,6 @@ export default function TournamentManagementPage() {
   }
 
   // ======================================================
-  // 📤 Export des combos récents
-  // ======================================================
-  const fetchRecentCombos = async () => {
-    if (!selectedTournament) {
-      alert('Veuillez sélectionner un tournoi')
-      return
-    }
-
-    try {
-      // Récupérer tous les matchs du tournoi
-      const { data: matches, error: matchesError } = await supabase
-        .from('tournament_matches')
-        .select('*')
-        .eq('tournament_id', selectedTournament)
-
-      if (matchesError) throw matchesError
-
-      if (!matches || matches.length === 0) {
-        alert('Aucun match trouvé pour ce tournoi')
-        return
-      }
-
-      // Récupérer tous les logs de rounds pour ces matchs
-      const matchIds = matches.map(m => m.match_id)
-      const { data: roundLogs, error: logsError } = await supabase
-        .from('match_rounds')
-        .select('*')
-        .in('match_id', matchIds)
-        .order('created_at', { ascending: false })
-
-      if (logsError) throw logsError
-
-      if (!roundLogs || roundLogs.length === 0) {
-        alert('Aucun round trouvé pour les matchs de ce tournoi')
-        return
-      }
-
-      // Traiter les données pour obtenir les combos les plus récents par joueur
-      const comboUsage: Map<string, RecentComboExport> = new Map()
-
-      roundLogs.forEach(log => {
-        const playerId = log.winner_id
-        const comboId = log.winner_combo_id
-        
-        if (playerId && comboId && !comboUsage.has(playerId)) {
-          const player = participants.find(p => p.player_id === playerId)
-          const combo = combosList.find(c => c.combo_id === comboId)
-          
-          if (player && combo) {
-            comboUsage.set(playerId, {
-              player_name: player.player_name,
-              combo_name: combo.name,
-              combo_id: comboId,
-              last_used: log.created_at
-            })
-          }
-        }
-      })
-
-      const recentCombosArray = Array.from(comboUsage.values())
-        .sort((a, b) => new Date(b.last_used).getTime() - new Date(a.last_used).getTime())
-
-      setRecentCombos(recentCombosArray)
-      setShowExport(true)
-    } catch (error) {
-      console.error('Erreur lors de la récupération des combos récents:', error)
-      alert('Erreur lors de la récupération des combos récents')
-    }
-  }
-
-  const exportCombosToCSV = () => {
-    if (recentCombos.length === 0) return
-
-    const headers = ['Joueur', 'Combo', 'ID Combo', 'Dernière utilisation']
-    const csvContent = [
-      headers.join(','),
-      ...recentCombos.map(combo => 
-        [combo.player_name, combo.combo_name, combo.combo_id, combo.last_used]
-          .map(field => `"${field}"`).join(',')
-      )
-    ].join('\n')
-
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' })
-    const link = document.createElement('a')
-    const url = URL.createObjectURL(blob)
-    link.setAttribute('href', url)
-    link.setAttribute('download', `combos-recents-${selectedTournament}-${new Date().toISOString().split('T')[0]}.csv`)
-    link.style.visibility = 'hidden'
-    document.body.appendChild(link)
-    link.click()
-    document.body.removeChild(link)
-  }
-
-  // ======================================================
   // 🎨 UI
   // ======================================================
   if (admin === null) {
@@ -433,8 +327,6 @@ export default function TournamentManagementPage() {
           onChange={(e) => {
             setSelectedTournament(e.target.value)
             resetMatch()
-            setShowExport(false)
-            setRecentCombos([])
           }}
         >
           <option value="">Sélectionnez un tournoi</option>
@@ -444,16 +336,6 @@ export default function TournamentManagementPage() {
             </option>
           ))}
         </select>
-        
-        {/* Bouton d'export des combos récents */}
-        {selectedTournament && (
-          <button
-            onClick={fetchRecentCombos}
-            className="mt-4 w-full bg-green-600 hover:bg-green-700 text-white py-3 rounded-xl font-bold shadow-lg transition-all duration-200"
-          >
-            📊 Exporter les combos récents
-          </button>
-        )}
       </div>
 
       {/* Sélection joueurs */}
@@ -485,49 +367,6 @@ export default function TournamentManagementPage() {
         </div>
       )}
 
-      {/* Modal d'export des combos récents */}
-      {showExport && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 p-6 rounded-xl border border-blue-500 max-w-2xl w-full mx-4">
-            <h3 className="text-xl font-bold mb-4 text-blue-300">Combos récents du tournoi</h3>
-            <div className="max-h-96 overflow-y-auto mb-4">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-600">
-                    <th className="text-left p-2">Joueur</th>
-                    <th className="text-left p-2">Combo</th>
-                    <th className="text-left p-2">Dernière utilisation</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {recentCombos.map((combo, index) => (
-                    <tr key={index} className="border-b border-gray-700">
-                      <td className="p-2">{combo.player_name}</td>
-                      <td className="p-2">{combo.combo_name}</td>
-                      <td className="p-2">{new Date(combo.last_used).toLocaleDateString('fr-FR')}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-            <div className="flex gap-4">
-              <button
-                onClick={exportCombosToCSV}
-                className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-lg font-bold"
-              >
-                📥 Télécharger CSV
-              </button>
-              <button
-                onClick={() => setShowExport(false)}
-                className="flex-1 bg-gray-600 hover:bg-gray-700 text-white py-2 rounded-lg font-bold"
-              >
-                Fermer
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Combos + Score */}
       <div className="flex flex-col md:flex-row gap-4 mb-8">
         {[1, 2].map((num) => {
@@ -543,22 +382,27 @@ export default function TournamentManagementPage() {
             >
               <h2 className="font-bold mb-4 text-pink-300">Combos de {name}</h2>
               {playerDeck ? (
-                [playerDeck.combo_id_1, playerDeck.combo_id_2, playerDeck.combo_id_3].map(
-                  (cid, idx) =>
-                    cid && (
-                      <label key={cid} className="block mb-2">
-                        <input
-                          type="radio"
-                          name={`combo${num}`}
-                          value={cid}
-                          checked={(num === 1 ? selectedCombo1 : selectedCombo2) === cid}
-                          onChange={() => setCombo(cid)}
-                          className="mr-2"
-                        />
-                        Combo {idx + 1} - {getComboName(cid)}
-                      </label>
-                    )
-                )
+                <div>
+                  <p className="text-sm text-gray-400 mb-2">
+                    Deck sélectionné (le plus récent)
+                  </p>
+                  {[playerDeck.combo_id_1, playerDeck.combo_id_2, playerDeck.combo_id_3].map(
+                    (cid, idx) =>
+                      cid && (
+                        <label key={cid} className="block mb-2">
+                          <input
+                            type="radio"
+                            name={`combo${num}`}
+                            value={cid}
+                            checked={(num === 1 ? selectedCombo1 : selectedCombo2) === cid}
+                            onChange={() => setCombo(cid)}
+                            className="mr-2"
+                          />
+                          Combo {idx + 1} - {getComboName(cid)}
+                        </label>
+                      )
+                  )}
+                </div>
               ) : (
                 <p className="text-gray-400">Pas de deck sélectionné</p>
               )}
