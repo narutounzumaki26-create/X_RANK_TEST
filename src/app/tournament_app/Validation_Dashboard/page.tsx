@@ -1,6 +1,6 @@
 "use client";
 import { useRouter } from "next/navigation";
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import { supabase } from "@/lib/supabaseClient";
 import { MainMenuButton } from "@/components/navigation/MainMenuButton";
 
@@ -9,6 +9,7 @@ interface TournamentParticipant {
   tournament_id: string;
   is_validated: boolean;
   tournament_deck: string;
+  created_at?: string;
   player?: {
     player_name: string;
     user_id: string;
@@ -48,49 +49,7 @@ export default function ParticipantValidationDashboard() {
   const [updatingIds, setUpdatingIds] = useState<{player_id: string, tournament_id: string} | null>(null);
   const [expandedDecks, setExpandedDecks] = useState<Set<string>>(new Set());
 
-  useEffect(() => {
-    const checkAuthAndAdmin = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        router.push("/login");
-        return;
-      }
-
-      // Check if user is admin
-      const { data: playerData } = await supabase
-        .from("players")
-        .select("Admin")
-        .eq("user_id", user.id)
-        .single();
-
-      if (!playerData?.Admin) {
-        router.push("/");
-        return;
-      }
-
-      setIsAdmin(true);
-      fetchTournaments();
-      fetchParticipants();
-    };
-
-    checkAuthAndAdmin();
-  }, [router]);
-
-  const fetchTournaments = async () => {
-    try {
-      const { data: tournamentsData, error } = await supabase
-        .from("tournaments")
-        .select("tournament_id, name")
-        .order("name");
-
-      if (error) throw error;
-      setTournaments(tournamentsData || []);
-    } catch (error) {
-      console.error("Error fetching tournaments:", error);
-    }
-  };
-
-  const fetchParticipants = async () => {
+  const fetchParticipants = useCallback(async () => {
     try {
       setLoading(true);
 
@@ -160,17 +119,59 @@ export default function ParticipantValidationDashboard() {
     } finally {
       setLoading(false);
     }
+  }, []);
+
+  useEffect(() => {
+    const checkAuthAndAdmin = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push("/login");
+        return;
+      }
+
+      // Check if user is admin
+      const { data: playerData } = await supabase
+        .from("players")
+        .select("Admin")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!playerData?.Admin) {
+        router.push("/");
+        return;
+      }
+
+      setIsAdmin(true);
+      fetchTournaments();
+      fetchParticipants();
+    };
+
+    checkAuthAndAdmin();
+  }, [router, fetchParticipants]);
+
+  const fetchTournaments = async () => {
+    try {
+      const { data: tournamentsData, error } = await supabase
+        .from("tournaments")
+        .select("tournament_id, name")
+        .order("name");
+
+      if (error) throw error;
+      setTournaments(tournamentsData || []);
+    } catch (error) {
+      console.error("Error fetching tournaments:", error);
+    }
   };
 
   // Get only the most recent participant entry for each player-tournament combination
-  const getMostRecentParticipants = (allParticipants: any[]): TournamentParticipant[] => {
+  const getMostRecentParticipants = (allParticipants: TournamentParticipant[]): TournamentParticipant[] => {
     const participantMap = new Map();
     
     allParticipants.forEach(participant => {
       const key = `${participant.player_id}-${participant.tournament_id}`;
       const existing = participantMap.get(key);
       
-      if (!existing || new Date(participant.created_at) > new Date(existing.created_at)) {
+      if (!existing || (participant.created_at && existing.created_at && new Date(participant.created_at) > new Date(existing.created_at))) {
         participantMap.set(key, participant);
       }
     });
@@ -309,7 +310,7 @@ export default function ParticipantValidationDashboard() {
     return updatingIds?.player_id === player_id && updatingIds?.tournament_id === tournament_id;
   };
 
-  const getComboType = (combo: any): string => {
+  const getComboType = (combo: { assist?: { name: string }; lock_chip?: { name: string } }): string => {
     return combo.assist && combo.lock_chip ? "CX" : "Standard";
   };
 
