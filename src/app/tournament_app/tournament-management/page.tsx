@@ -137,19 +137,19 @@ export default function TournamentManagementPage() {
   }, [selectedTournament])
 
   // ======================================================
-  // 🧩 Fetch Decks - METTRE À JOUR POUR PRENDRE LE PLUS RÉCENT
+  // 🧩 Fetch Decks - CORRIGÉ AVEC Date_Creation
   // ======================================================
   const fetchPlayerDeck = useCallback(
     async (playerId: string, setDeck: (d: tournament_decks | null) => void) => {
       if (!selectedTournament || !playerId) return
       
-      // Récupérer TOUS les decks du joueur pour ce tournoi, triés par date de création (le plus récent en premier)
+      // Récupérer TOUS les decks du joueur pour ce tournoi, triés par Date_Creation (le plus récent en premier)
       const { data, error } = await supabase
         .from('tournament_decks')
         .select('*')
         .eq('tournament_id', selectedTournament)
         .eq('player_id', playerId)
-        .order('created_at', { ascending: false }) // Le plus récent en premier
+        .order('Date_Creation', { ascending: false }) // Le plus récent en premier - CORRIGÉ
         .limit(1) // Prendre seulement le premier (le plus récent)
 
       if (error) {
@@ -164,6 +164,14 @@ export default function TournamentManagementPage() {
     },
     [selectedTournament]
   )
+
+  useEffect(() => {
+    fetchPlayerDeck(selectedPlayer1, setPlayer1Deck)
+  }, [selectedPlayer1, selectedTournament, fetchPlayerDeck])
+
+  useEffect(() => {
+    fetchPlayerDeck(selectedPlayer2, setPlayer2Deck)
+  }, [selectedPlayer2, selectedTournament, fetchPlayerDeck])
 
   // ======================================================
   // 🎯 Fonctions Match
