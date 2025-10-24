@@ -60,6 +60,15 @@ type PieceOption = {
   type?: string
 }
 
+// Type guard functions for Bey type
+const isBeyPieceKey = (key: string): key is BeyPieceKey => {
+  return ['blade', 'bit', 'ratchet', 'assist', 'lockChip'].includes(key)
+}
+
+const isBeyTypeKey = (key: string): key is keyof Bey => {
+  return ['bladeType', 'bitType', 'ratchetType', 'assistType', 'lockChipType'].includes(key)
+}
+
 export default function TournamentManagementPage() {
   const router = useRouter()
 
@@ -436,8 +445,29 @@ export default function TournamentManagementPage() {
       // Update the type field with proper type handling
       if (pieceType) {
         const typeKey = `${type}Type` as keyof Bey
-        // Use type assertion to handle the dynamic property assignment
-        (newBeys[index] as any)[typeKey] = pieceType
+        
+        // Use a type-safe approach with a switch statement
+        switch (typeKey) {
+          case 'bladeType':
+            newBeys[index].bladeType = pieceType
+            break
+          case 'bitType':
+            newBeys[index].bitType = pieceType
+            break
+          case 'ratchetType':
+            newBeys[index].ratchetType = pieceType
+            break
+          case 'assistType':
+            newBeys[index].assistType = pieceType
+            break
+          case 'lockChipType':
+            newBeys[index].lockChipType = pieceType
+            break
+          default:
+            // This should never happen, but for type safety
+            const exhaustiveCheck: never = typeKey
+            return exhaustiveCheck
+        }
       }
 
       return newBeys
@@ -495,7 +525,7 @@ export default function TournamentManagementPage() {
       return
     }
 
-    const incompleteBeys = beys.some((bey, index) => {
+    const incompleteBeys = beys.some((bey) => {
       if (bey.cx) {
         return !bey.lockChip || !bey.blade || !bey.assist || !bey.ratchet || !bey.bit
       } else {
