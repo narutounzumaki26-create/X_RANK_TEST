@@ -2,6 +2,7 @@
 import { useRouter } from "next/navigation";
 import React, { useState, useEffect } from "react";
 import { supabase } from "@/lib/supabaseClient";
+import { User } from "@supabase/supabase-js";
 
 import {
   Select,
@@ -25,16 +26,6 @@ interface Tournament {
   location: string | null;
   date: string;
   max_combos: number;
-}
-
-interface Combo {
-  combo_id: string;
-  name: string;
-  blade_id: string;
-  ratchet_id: string;
-  bit_id: string;
-  assist_id: string | null;
-  lock_chip_id: string | null;
 }
 
 interface TournamentDeck {
@@ -75,7 +66,6 @@ type Bey = {
 
 export default function TournamentInscriptionPage() {
   const router = useRouter();
-  const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null);
   
   useEffect(() => {
@@ -85,7 +75,6 @@ export default function TournamentInscriptionPage() {
         router.push("/login");
         return;
       }
-      setCurrentUser(user);
 
       // Get player data for current user
       const { data: playerData } = await supabase
@@ -263,8 +252,7 @@ export default function TournamentInscriptionPage() {
   const handleBeyPieceSelect = (
     index: number,
     type: BeyPieceKey,
-    value: string,
-    pieceType?: string
+    value: string
   ) => {
     const newBeys = [...beys];
     newBeys[index] = {
@@ -274,16 +262,11 @@ export default function TournamentInscriptionPage() {
       existingComboId: undefined
     };
 
-    if (pieceType) {
-      const typeKey = `${type}Type` as keyof Bey;
-      newBeys[index][typeKey] = pieceType;
-    }
-
     setBeys(newBeys);
   };
 
   // Function to generate combo name from selected parts
-  const generateComboName = (bey: Bey, index: number): string => {
+  const generateComboName = (bey: Bey): string => {
     const parts: string[] = [];
 
     // Get the names of selected parts
@@ -315,16 +298,17 @@ export default function TournamentInscriptionPage() {
 
     // If we have all required parts, create the name
     if (parts.length > 0) {
-      return `Combo ${index + 1} - ${parts.join('-')}`;
+      return parts.join('-');
     }
 
     // Fallback if no parts selected yet
-    return `Combo ${index + 1}`;
+    return "Nouveau Combo";
   };
 
   // Function to get current combo name for display
   const getCurrentComboName = (bey: Bey, index: number): string => {
-    return generateComboName(bey, index);
+    const baseName = generateComboName(bey);
+    return baseName === "Nouveau Combo" ? `Combo ${index + 1}` : `Combo ${index + 1} - ${baseName}`;
   };
 
   const handleSubmit = async () => {
@@ -339,7 +323,7 @@ export default function TournamentInscriptionPage() {
     }
 
     // Check if all required pieces are selected for each bey
-    const incompleteBeys = beys.slice(0, selectedComboCount).some((bey, index) => {
+    const incompleteBeys = beys.slice(0, selectedComboCount).some((bey) => {
       if (bey.cx) {
         return !bey.lockChip || !bey.blade || !bey.assist || !bey.ratchet || !bey.bit;
       } else {
@@ -360,7 +344,7 @@ export default function TournamentInscriptionPage() {
         
         if (bey.existingComboId) {
           // Update existing combo
-          const comboName = generateComboName(bey, i);
+          const comboName = generateComboName(bey);
           const { error: updateError } = await supabase
             .from("combos")
             .update({
@@ -377,7 +361,7 @@ export default function TournamentInscriptionPage() {
           comboIds.push(bey.existingComboId);
         } else {
           // Create new combo
-          const comboName = generateComboName(bey, i);
+          const comboName = generateComboName(bey);
           const { data: combo, error: comboError } = await supabase
             .from("combos")
             .insert({
@@ -639,7 +623,7 @@ export default function TournamentInscriptionPage() {
               return (
                 <Select
                   key={pieceKey}
-                  onValueChange={v => handleBeyPieceSelect(index, pieceKey, v)}
+                  onValueChange={(v) => handleBeyPieceSelect(index, pieceKey, v)}
                   value={selectedValue}
                   disabled={existingParticipant?.is_validated}
                 >
