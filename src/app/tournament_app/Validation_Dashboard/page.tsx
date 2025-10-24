@@ -235,12 +235,12 @@ export default function ParticipantValidationDashboard() {
 
                     {/* Date */}
                     <div className="col-span-2 text-gray-300">
-                      {participant.tournament?.date ? formatDate(participant.tournament.date) : &apos;N/A&apos;}
+                      {participant.tournament?.date ? formatDate(participant.tournament.date) : 'N/A'}
                     </div>
 
                     {/* Location */}
                     <div className="col-span-2 text-gray-300">
-                      {participant.tournament?.location || &apos;Non spécifié&apos;}
+                      {participant.tournament?.location || 'Non spécifié'}
                     </div>
 
                     {/* Status */}
