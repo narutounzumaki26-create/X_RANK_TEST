@@ -1,168 +1,455 @@
-// src/app/profile/page.tsx
-import { redirect } from "next/navigation"
-import { createSupabaseServerClient } from "@/lib/supabaseServer"
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-  CardDescription,
-} from "@/components/ui/card"
-import { MainMenuButton } from "@/components/navigation/MainMenuButton"
-import { CyberPage } from "@/components/layout/CyberPage"
-import type { players, player_stats } from "src/app/tournament_app/tournament"
+'use client'
 
-// ============================================================
-// 🔹 Page Profil Joueur
-// ============================================================
-export default async function ProfilePage() {
-  const supabase = await createSupabaseServerClient()
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabaseClient'
+import { MainMenuButton } from '@/components/navigation/MainMenuButton'
 
-  // --- Authentification ---
-  const {
-    data: { user },
-  } = await supabase.auth.getUser()
-  if (!user) redirect("/login")
+// Types pour les matches
+type Match = {
+  match_id: string
+  tournament_id: string | null
+  player1_id: string | null
+  player2_id: string | null
+  winner_id: string | null
+  loser_id: string | null
+  rounds: number
+  created_by: string | null
+  match_logs: string | null
+  spin_finishes: number | null
+  over_finishes: number | null
+  burst_finishes: number | null
+  xtreme_finishes: number | null
+  spin_finishes2: number | null
+  over_finishes2: number | null
+  burst_finishes2: number | null
+  xtreme_finishes2: number | null
+  tournaments?: {
+    name: string
+  }
+  player1?: {
+    player_name: string
+  }
+  player2?: {
+    player_name: string
+  }
+}
 
-  // --- Récupération du joueur lié à cet utilisateur ---
-  const { data: player, error: playerError } = await supabase
-    .from("players")
-    .select("player_id, player_name")
-    .eq("user_id", user.id)
-    .single<players>()
+// Type pour les logs de match
+type MatchLog = {
+  round: number
+  player: number
+  action: string
+  points: number
+  winner_combo_name: string
+  loser_combo_name: string
+  winner_combo_id: string
+  loser_combo_id: string
+  timestamp: string
+}
 
-  if (playerError || !player) {
+// Type pour les statistiques calculées
+type PlayerStats = {
+  total_matches: number
+  wins: number
+  losses: number
+  draws: number
+  win_rate: number
+  total_rounds: number
+  total_finishes: number
+  spin_finishes: number
+  over_finishes: number
+  burst_finishes: number
+  xtreme_finishes: number
+  average_rounds_per_match: number
+  favorite_finish: string
+  most_used_combo: string
+}
+
+export default function ProfileStatsPage() {
+  const [playerId, setPlayerId] = useState<string>('')
+  const [playerName, setPlayerName] = useState<string>('')
+  const [matches, setMatches] = useState<Match[]>([])
+  const [selectedMatchLogs, setSelectedMatchLogs] = useState<MatchLog[]>([])
+  const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null)
+  const [stats, setStats] = useState<PlayerStats | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  // ======================================================
+  // 🔍 Récupération du joueur connecté
+  // ======================================================
+  useEffect(() => {
+    const getCurrentPlayer = async () => {
+      const { data: { user } } = await supabase.auth.getUser()
+      if (!user) return
+
+      const { data: player } = await supabase
+        .from('players')
+        .select('player_id, player_name')
+        .eq('user_id', user.id)
+        .single()
+
+      if (player) {
+        setPlayerId(player.player_id)
+        setPlayerName(player.player_name)
+        fetchPlayerMatches(player.player_id)
+      }
+    }
+
+    getCurrentPlayer()
+  }, [])
+
+  // ======================================================
+  // 📊 Récupération des matches du joueur
+  // ======================================================
+  const fetchPlayerMatches = async (pId: string) => {
+    setLoading(true)
+    
+    const { data: matchesData, error } = await supabase
+      .from('matches')
+      .select(`
+        *,
+        tournaments:tournament_id (name),
+        player1:player1_id (player_name),
+        player2:player2_id (player_name)
+      `)
+      .or(`player1_id.eq.${pId},player2_id.eq.${pId}`)
+      .order('created_at', { ascending: false })
+
+    if (error) {
+      console.error('Erreur lors de la récupération des matches:', error)
+      setLoading(false)
+      return
+    }
+
+    setMatches(matchesData || [])
+    calculateStats(matchesData || [], pId)
+    setLoading(false)
+  }
+
+  // ======================================================
+  // 🧮 Calcul des statistiques
+  // ======================================================
+  const calculateStats = (playerMatches: Match[], pId: string) => {
+    let totalMatches = playerMatches.length
+    let wins = 0
+    let losses = 0
+    let draws = 0
+    let totalRounds = 0
+    let totalFinishes = 0
+    let spinFinishes = 0
+    let overFinishes = 0
+    let burstFinishes = 0
+    let xtremeFinishes = 0
+    
+    const comboUsage = new Map<string, number>()
+    const finishUsage = new Map<string, number>()
+
+    playerMatches.forEach(match => {
+      const isPlayer1 = match.player1_id === pId
+      const isPlayer2 = match.player2_id === pId
+      
+      // Compter wins/losses/draws
+      if (match.winner_id === pId) {
+        wins++
+      } else if (match.loser_id === pId) {
+        losses++
+      } else if (match.winner_id === null && match.loser_id === null) {
+        draws++
+      }
+
+      // Compter les rounds
+      totalRounds += match.rounds || 0
+
+      // Compter les finishes selon si le joueur est player1 ou player2
+      if (isPlayer1) {
+        spinFinishes += match.spin_finishes || 0
+        overFinishes += match.over_finishes || 0
+        burstFinishes += match.burst_finishes || 0
+        xtremeFinishes += match.xtreme_finishes || 0
+        
+        totalFinishes += (match.spin_finishes || 0) + (match.over_finishes || 0) + 
+                        (match.burst_finishes || 0) + (match.xtreme_finishes || 0)
+      } else if (isPlayer2) {
+        spinFinishes += match.spin_finishes2 || 0
+        overFinishes += match.over_finishes2 || 0
+        burstFinishes += match.burst_finishes2 || 0
+        xtremeFinishes += match.xtreme_finishes2 || 0
+        
+        totalFinishes += (match.spin_finishes2 || 0) + (match.over_finishes2 || 0) + 
+                        (match.burst_finishes2 || 0) + (match.xtreme_finishes2 || 0)
+      }
+
+      // Analyser les logs pour l'usage des combos
+      if (match.match_logs) {
+        try {
+          const logs: MatchLog[] = JSON.parse(match.match_logs)
+          logs.forEach(log => {
+            if (log.player === (isPlayer1 ? 1 : 2)) {
+              // Usage des combos
+              const winnerCombo = log.winner_combo_name
+              comboUsage.set(winnerCombo, (comboUsage.get(winnerCombo) || 0) + 1)
+              
+              // Usage des finishes
+              finishUsage.set(log.action, (finishUsage.get(log.action) || 0) + 1)
+            }
+          })
+        } catch (e) {
+          console.error('Erreur parsing match logs:', e)
+        }
+      }
+    })
+
+    // Trouver le combo le plus utilisé
+    let mostUsedCombo = 'Aucun'
+    let maxComboUsage = 0
+    comboUsage.forEach((count, combo) => {
+      if (count > maxComboUsage) {
+        maxComboUsage = count
+        mostUsedCombo = combo
+      }
+    })
+
+    // Trouver le finish préféré
+    let favoriteFinish = 'Aucun'
+    let maxFinishUsage = 0
+    finishUsage.forEach((count, finish) => {
+      if (count > maxFinishUsage) {
+        maxFinishUsage = count
+        favoriteFinish = finish
+      }
+    })
+
+    const calculatedStats: PlayerStats = {
+      total_matches: totalMatches,
+      wins,
+      losses,
+      draws,
+      win_rate: totalMatches > 0 ? Math.round((wins / totalMatches) * 100) : 0,
+      total_rounds: totalRounds,
+      total_finishes: totalFinishes,
+      spin_finishes: spinFinishes,
+      over_finishes: overFinishes,
+      burst_finishes: burstFinishes,
+      xtreme_finishes: xtremeFinishes,
+      average_rounds_per_match: totalMatches > 0 ? Math.round((totalRounds / totalMatches) * 10) / 10 : 0,
+      favorite_finish: favoriteFinish,
+      most_used_combo: mostUsedCombo
+    }
+
+    setStats(calculatedStats)
+  }
+
+  // ======================================================
+  // 📝 Affichage des logs d'un match
+  // ======================================================
+  const showMatchLogs = (match: Match) => {
+    if (match.match_logs) {
+      try {
+        const logs: MatchLog[] = JSON.parse(match.match_logs)
+        setSelectedMatchLogs(logs)
+        setSelectedMatchId(match.match_id)
+      } catch (e) {
+        console.error('Erreur parsing match logs:', e)
+        setSelectedMatchLogs([])
+      }
+    } else {
+      setSelectedMatchLogs([])
+    }
+  }
+
+  // ======================================================
+  // 🎨 Interface utilisateur
+  // ======================================================
+  if (loading) {
     return (
-      <CyberPage
-        centerContent
-        header={{
-          title: "Profil joueur",
-          subtitle:
-            "Aucun profil n\'est associé à ce compte. Merci de contacter un administrateur.",
-          actions: <MainMenuButton />,
-        }}
-      >
-        <Card className="w-full max-w-xl border border-red-500/50 bg-black/70 text-center shadow-[0_0_30px_rgba(255,0,0,0.35)]">
-          <CardHeader>
-            <CardTitle className="text-red-400 text-2xl font-bold drop-shadow-[0_0_12px_rgba(255,0,0,0.6)]">
-              Joueur non trouvé
-            </CardTitle>
-            <CardDescription className="text-gray-200/80">
-              Aucun joueur n&apos;a été identifié pour cet utilisateur.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="mt-2 space-y-2 rounded-2xl border border-white/10 bg-white/5 p-4 text-white">
-            <p className="text-sm font-mono">User ID: {user.id}</p>
-            {playerError && (
-              <p className="text-sm font-mono text-red-300">
-                Erreur: {playerError.message}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      </CyberPage>
+      <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white flex items-center justify-center">
+        <div className="text-center">
+          <MainMenuButton />
+          <p className="mt-4 text-xl">Chargement des statistiques...</p>
+        </div>
+      </div>
     )
   }
 
-  // --- Récupération des stats joueur ---
-  const { data: stats, error: statsError } = await supabase
-    .from("player_stats")
-    .select("*")
-    .eq("player_id", player.player_id)
-    .maybeSingle<player_stats>()
-
-  // --- Récupération du score global ---
-  const { data: pointsData, error: pointsError } = await supabase
-    .from("points")
-    .select("player_score_global")
-    .eq("player_id", player.player_id)
-    .maybeSingle<{ player_score_global: number }>()
-
-  // --- Calculs ---
-  const matchesPlayed = stats?.matches_played ?? 0
-  const matchesWon = stats?.matches_won ?? 0
-  const winrate = matchesPlayed > 0 ? Math.round((matchesWon / matchesPlayed) * 100) : 0
-  const spinFinishes = stats?.spin_finishes ?? 0
-  const overFinishes = stats?.over_finishes ?? 0
-  const burstFinishes = stats?.burst_finishes ?? 0
-  const xtremeFinishes = stats?.xtreme_finishes ?? 0
-  const totalPoints = pointsData?.player_score_global ?? 0
-
-  const statsList = [
-    { label: "Matchs joués", value: matchesPlayed },
-    { label: "Matchs gagnés", value: matchesWon },
-    { label: "Winrate (%)", value: winrate },
-    { label: "Spin total", value: spinFinishes },
-    { label: "Over total", value: overFinishes },
-    { label: "Burst total", value: burstFinishes },
-    { label: "Xtreme total", value: xtremeFinishes },
-    { label: "Points totaux", value: totalPoints },
-  ]
-
-  // ============================================================
-  // 🎨 Rendu
-  // ============================================================
   return (
-    <CyberPage
-      header={{
-        title: `⚡ Profil de ${player.player_name}`,
-        subtitle: "Vos statistiques globales et vos performances en tournoi.",
-        actions: <MainMenuButton />,
-      }}
-      contentClassName="mx-auto w-full max-w-4xl gap-6"
-    >
-      <Card className="border border-fuchsia-400/40 bg-black/70 shadow-[0_0_30px_rgba(255,0,255,0.35)]">
-        <CardHeader className="pb-4 text-center">
-          <CardTitle className="text-2xl text-fuchsia-200 drop-shadow-[0_0_14px_rgba(255,0,255,0.45)]">
-            Statistiques globales
-          </CardTitle>
-          <CardDescription className="text-gray-200/80">
-            Les indicateurs sont calculés à partir de vos matchs officiels.
-          </CardDescription>
-        </CardHeader>
+    <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black text-white p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-4xl font-bold text-purple-400">📊 Profil & Statistiques</h1>
+          <MainMenuButton />
+        </div>
 
-        <CardContent className="grid gap-4 sm:grid-cols-3">
-          {statsList.map((stat) => (
-            <StatCard key={stat.label} label={stat.label} value={stat.value} />
-          ))}
-        </CardContent>
+        {/* Informations joueur */}
+        <div className="bg-gray-800 rounded-xl p-6 mb-8 border border-purple-500">
+          <h2 className="text-2xl font-bold mb-4 text-purple-300">👤 {playerName}</h2>
+          <p className="text-gray-300">ID: {playerId}</p>
+        </div>
 
-        <CardContent className="mt-2 grid gap-3 rounded-2xl border border-white/10 bg-white/5 p-4 text-center text-white sm:grid-cols-2">
-          <div>
-            <p className="text-xs font-mono uppercase tracking-[0.35em] text-cyan-300/80">
-              Identifiant
-            </p>
-            <p className="mt-1 text-sm font-semibold">{player.player_id}</p>
-          </div>
-          <div>
-            <p className="text-xs font-mono uppercase tracking-[0.35em] text-cyan-300/80">
-              Winrate
-            </p>
-            <p className="mt-1 text-sm font-semibold">{winrate}%</p>
-          </div>
-          {(statsError || pointsError) && (
-            <div className="sm:col-span-2 rounded-xl border border-red-500/40 bg-red-500/10 px-4 py-2 text-xs text-red-300">
-              Erreurs lors du chargement des données : {statsError?.message || ""} {pointsError?.message || ""}
+        {/* Statistiques */}
+        {stats && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {/* Carte Victoires */}
+            <div className="bg-green-600 rounded-xl p-6 text-center shadow-lg">
+              <div className="text-3xl font-bold">{stats.wins}</div>
+              <div className="text-green-200">Victoires</div>
+              <div className="text-sm text-green-300 mt-2">{stats.win_rate}% de win rate</div>
             </div>
-          )}
-        </CardContent>
-      </Card>
-    </CyberPage>
-  )
-}
 
-// ============================================================
-// 🔸 Composant StatCard (mini carte néon)
-// ============================================================
-function StatCard({ label, value }: { label: string; value: number }) {
-  return (
-    <Card className="bg-gray-800/70 border-2 border-purple-600 rounded-xl shadow-[0_0_15px_#a0f] transition hover:scale-105 hover:shadow-[0_0_25px_#ff00ff]">
-      <CardContent className="flex flex-col items-center justify-center p-4">
-        <span className="text-lg font-bold text-white drop-shadow-[0_0_10px_#fff]">
-          {value}
-        </span>
-        <span className="text-sm text-gray-300 mt-1">{label}</span>
-      </CardContent>
-    </Card>
+            {/* Carte Défaites */}
+            <div className="bg-red-600 rounded-xl p-6 text-center shadow-lg">
+              <div className="text-3xl font-bold">{stats.losses}</div>
+              <div className="text-red-200">Défaites</div>
+              <div className="text-sm text-red-300 mt-2">{stats.draws} matchs nuls</div>
+            </div>
+
+            {/* Carte Finishes */}
+            <div className="bg-blue-600 rounded-xl p-6 text-center shadow-lg">
+              <div className="text-3xl font-bold">{stats.total_finishes}</div>
+              <div className="text-blue-200">Finishes totaux</div>
+              <div className="text-sm text-blue-300 mt-2">Finish préféré: {stats.favorite_finish}</div>
+            </div>
+
+            {/* Carte Rounds */}
+            <div className="bg-yellow-600 rounded-xl p-6 text-center shadow-lg">
+              <div className="text-3xl font-bold">{stats.total_rounds}</div>
+              <div className="text-yellow-200">Rounds joués</div>
+              <div className="text-sm text-yellow-300 mt-2">{stats.average_rounds_per_match} rounds/match</div>
+            </div>
+          </div>
+        )}
+
+        {/* Détails des statistiques */}
+        {stats && (
+          <div className="bg-gray-800 rounded-xl p-6 mb-8 border border-blue-500">
+            <h3 className="text-2xl font-bold mb-4 text-blue-300">📈 Détails des Statistiques</h3>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="text-center">
+                <div className="text-lg font-semibold">Matches</div>
+                <div className="text-2xl text-purple-400">{stats.total_matches}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-semibold">Spin Finishes</div>
+                <div className="text-2xl text-blue-400">{stats.spin_finishes}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-semibold">Over Finishes</div>
+                <div className="text-2xl text-green-400">{stats.over_finishes}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-semibold">Burst Finishes</div>
+                <div className="text-2xl text-red-400">{stats.burst_finishes}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-semibold">Xtreme Finishes</div>
+                <div className="text-2xl text-yellow-400">{stats.xtreme_finishes}</div>
+              </div>
+              <div className="text-center">
+                <div className="text-lg font-semibold">Combo favori</div>
+                <div className="text-lg text-pink-400 truncate" title={stats.most_used_combo}>
+                  {stats.most_used_combo}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Liste des matches */}
+        <div className="bg-gray-800 rounded-xl p-6 mb-8 border border-green-500">
+          <h3 className="text-2xl font-bold mb-4 text-green-300">🎮 Historique des Matches</h3>
+          <div className="space-y-4">
+            {matches.length === 0 ? (
+              <p className="text-gray-400 text-center py-8">Aucun match trouvé</p>
+            ) : (
+              matches.map((match) => (
+                <div
+                  key={match.match_id}
+                  className={`p-4 rounded-lg border cursor-pointer transition-all hover:scale-105 ${
+                    match.winner_id === playerId
+                      ? 'bg-green-900 border-green-500'
+                      : match.loser_id === playerId
+                      ? 'bg-red-900 border-red-500'
+                      : 'bg-yellow-900 border-yellow-500'
+                  }`}
+                  onClick={() => showMatchLogs(match)}
+                >
+                  <div className="flex justify-between items-center">
+                    <div className="flex-1">
+                      <div className="font-semibold">
+                        {match.player1?.player_name} vs {match.player2?.player_name}
+                      </div>
+                      <div className="text-sm text-gray-300">
+                        Tournoi: {match.tournaments?.name || 'N/A'} • Rounds: {match.rounds}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className={`text-lg font-bold ${
+                        match.winner_id === playerId
+                          ? 'text-green-400'
+                          : match.loser_id === playerId
+                          ? 'text-red-400'
+                          : 'text-yellow-400'
+                      }`}>
+                        {match.winner_id === playerId ? 'VICTOIRE' : 
+                         match.loser_id === playerId ? 'DÉFAITE' : 'ÉGALITÉ'}
+                      </div>
+                      <div className="text-sm text-gray-300">
+                        Finishes: {(match.spin_finishes || 0) + (match.over_finishes || 0) + 
+                                 (match.burst_finishes || 0) + (match.xtreme_finishes || 0) +
+                                 (match.spin_finishes2 || 0) + (match.over_finishes2 || 0) + 
+                                 (match.burst_finishes2 || 0) + (match.xtreme_finishes2 || 0)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </div>
+
+        {/* Logs du match sélectionné */}
+        {selectedMatchLogs.length > 0 && (
+          <div className="bg-gray-800 rounded-xl p-6 border border-yellow-500">
+            <h3 className="text-2xl font-bold mb-4 text-yellow-300">
+              📋 Logs du Match {selectedMatchId?.substring(0, 8)}...
+            </h3>
+            <div className="space-y-2 max-h-96 overflow-y-auto">
+              {selectedMatchLogs.map((log, index) => (
+                <div
+                  key={index}
+                  className="p-3 rounded-lg bg-gray-700 border border-gray-600"
+                >
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <span className="font-semibold">Tour {log.round}</span>
+                      <span className={`ml-2 px-2 py-1 rounded text-xs ${
+                        log.player === 1 ? 'bg-blue-600' : 'bg-red-600'
+                      }`}>
+                        Joueur {log.player}
+                      </span>
+                    </div>
+                    <div className={`px-2 py-1 rounded text-xs font-bold ${
+                      log.action === 'Spin' ? 'bg-blue-500' :
+                      log.action === 'Over' ? 'bg-green-500' :
+                      log.action === 'Burst' ? 'bg-red-500' : 'bg-yellow-500'
+                    }`}>
+                      {log.action} (+{log.points})
+                    </div>
+                  </div>
+                  <div className="mt-2 text-sm text-gray-300">
+                    <span className="text-green-400">{log.winner_combo_name}</span>
+                    <span className="mx-2">vs</span>
+                    <span className="text-red-400">{log.loser_combo_name}</span>
+                  </div>
+                  <div className="text-xs text-gray-400 mt-1">
+                    {new Date(log.timestamp).toLocaleString()}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
   )
 }
