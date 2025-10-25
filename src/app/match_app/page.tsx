@@ -191,7 +191,7 @@ export default function OfficialMatch() {
     async (playerId: string, setDeck: (d: TournamentDeck | null) => void) => {
       if (!playerId) return
       
-      console.log(`🔍 Fetching deck for player: ${playerId}`);
+      //(`🔍 Fetching deck for player: ${playerId}`);
       
       // First, get the deck
       const { data: deckData, error: deckError } = await supabase
@@ -209,12 +209,12 @@ export default function OfficialMatch() {
       }
 
       if (!deckData) {
-        console.log(`ℹ️ Aucun deck trouvé pour le joueur: ${playerId}`)
+        //(`ℹ️ Aucun deck trouvé pour le joueur: ${playerId}`)
         setDeck(null)
         return
       }
 
-      console.log('📦 Deck data found:', deckData);
+      
 
       // Get all combo IDs from the deck
       const comboIds = [
@@ -223,10 +223,10 @@ export default function OfficialMatch() {
         deckData.combo_id_3,
       ].filter(Boolean) as string[]
 
-      console.log('🆔 Combo IDs from deck:', comboIds);
+      
 
       if (comboIds.length === 0) {
-        console.log('⚠️ Deck found but no combo IDs');
+        //('⚠️ Deck found but no combo IDs');
         setDeck(deckData)
         return
       }
@@ -243,14 +243,14 @@ export default function OfficialMatch() {
         return
       }
 
-      console.log('🎯 Combos data found:', combosData);
+      //('🎯 Combos data found:', combosData);
 
       // Create a map of combo_id to combo name
       const comboNameMap = new Map(
         combosData?.map(combo => [combo.combo_id, combo.name]) || []
       )
 
-      console.log('🗺️ Combo name map:', comboNameMap);
+      //('🗺️ Combo name map:', comboNameMap);
 
       // Enhance deck data with combo names
       const enhancedDeck: TournamentDeck = {
@@ -260,7 +260,7 @@ export default function OfficialMatch() {
         combo_3_name: deckData.combo_id_3 ? comboNameMap.get(deckData.combo_id_3) : undefined,
       }
 
-      console.log('✨ Enhanced deck:', enhancedDeck);
+      //('✨ Enhanced deck:', enhancedDeck);
       setDeck(enhancedDeck)
     },
     []
@@ -425,7 +425,7 @@ export default function OfficialMatch() {
     }
 
     try {
-      console.log('📤 Envoi des données du match:', matchData)
+      //('📤 Envoi des données du match:', matchData)
       
       const { data, error } = await supabase
         .from('matches')
@@ -439,7 +439,7 @@ export default function OfficialMatch() {
         return null
       }
 
-      console.log('✅ Match créé avec succès, ID:', data.match_id, 'Official Match ID:', data.official_match_id)
+      //('✅ Match créé avec succès, ID:', data.match_id, 'Official Match ID:', data.official_match_id)
       return data.match_id
     } catch (error) {
       console.error('❌ Exception lors de la création du match:', error)
