@@ -344,7 +344,7 @@ export default function TournamentPage() {
       // Delete in the correct order to respect foreign key constraints
       // First delete tournament matches
       const { error: matchesError } = await supabase
-        .from("tournament_matches")
+        .from("tournament_decks")
         .delete()
         .eq("tournament_id", tournamentId);
 
