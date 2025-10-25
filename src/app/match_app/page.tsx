@@ -38,10 +38,10 @@ type MatchInsertData = {
   over_finishes2: number | null;
   burst_finishes2: number | null;
   xtreme_finishes2: number | null;
-  official_match_id: string | null; // Added this field
+  official_match_id: string | null;
 };
 
-// Types for deck management - UPDATED to match official_matchs_decks table
+// Types for deck management - UPDATED to include combo names
 type TournamentDeck = {
   player_id: string;
   combo_id_1?: string;
@@ -49,7 +49,11 @@ type TournamentDeck = {
   combo_id_3?: string;
   deck_id: string;
   Date_Creation: string;
-  official_match_id?: string; // Made optional to match your table structure
+  official_match_id?: string;
+  // Added combo names for display
+  combo_1_name?: string;
+  combo_2_name?: string;
+  combo_3_name?: string;
 }
 
 type Bey = {
@@ -181,37 +185,101 @@ export default function OfficialMatch() {
   }, [])
 
   // ======================================================
-  // 🧩 Fetch Decks for Match Players - UPDATED table name
+  // 🧩 Fetch Decks for Match Players - IMPROVED with combo names
   // ======================================================
   const fetchPlayerDeck = useCallback(
     async (playerId: string, setDeck: (d: TournamentDeck | null) => void) => {
       if (!playerId) return
       
-      const { data, error } = await supabase
-        .from('official_matchs_decks') // CORRECTED TABLE NAME
+      console.log(`🔍 Fetching deck for player: ${playerId}`);
+      
+      // First, get the deck
+      const { data: deckData, error: deckError } = await supabase
+        .from('official_matches_decks')
         .select('*')
         .eq('player_id', playerId)
         .order('Date_Creation', { ascending: false })
         .limit(1)
+        .single()
 
-      if (error) {
-        console.error('Erreur lors de la récupération du deck:', error)
+      if (deckError) {
+        console.error('❌ Erreur lors de la récupération du deck:', deckError)
         setDeck(null)
-      } else if (data && data.length > 0) {
-        setDeck(data[0])
-      } else {
-        setDeck(null)
+        return
       }
+
+      if (!deckData) {
+        console.log(`ℹ️ Aucun deck trouvé pour le joueur: ${playerId}`)
+        setDeck(null)
+        return
+      }
+
+      console.log('📦 Deck data found:', deckData);
+
+      // Get all combo IDs from the deck
+      const comboIds = [
+        deckData.combo_id_1,
+        deckData.combo_id_2,
+        deckData.combo_id_3,
+      ].filter(Boolean) as string[]
+
+      console.log('🆔 Combo IDs from deck:', comboIds);
+
+      if (comboIds.length === 0) {
+        console.log('⚠️ Deck found but no combo IDs');
+        setDeck(deckData)
+        return
+      }
+
+      // Fetch combo details with their names
+      const { data: combosData, error: combosError } = await supabase
+        .from('combos')
+        .select('combo_id, name')
+        .in('combo_id', comboIds)
+
+      if (combosError) {
+        console.error('❌ Erreur lors de la récupération des combos:', combosError)
+        setDeck(deckData)
+        return
+      }
+
+      console.log('🎯 Combos data found:', combosData);
+
+      // Create a map of combo_id to combo name
+      const comboNameMap = new Map(
+        combosData?.map(combo => [combo.combo_id, combo.name]) || []
+      )
+
+      console.log('🗺️ Combo name map:', comboNameMap);
+
+      // Enhance deck data with combo names
+      const enhancedDeck: TournamentDeck = {
+        ...deckData,
+        combo_1_name: deckData.combo_id_1 ? comboNameMap.get(deckData.combo_id_1) : undefined,
+        combo_2_name: deckData.combo_id_2 ? comboNameMap.get(deckData.combo_id_2) : undefined,
+        combo_3_name: deckData.combo_id_3 ? comboNameMap.get(deckData.combo_id_3) : undefined,
+      }
+
+      console.log('✨ Enhanced deck:', enhancedDeck);
+      setDeck(enhancedDeck)
     },
     []
   )
 
   useEffect(() => {
-    fetchPlayerDeck(selectedPlayer1, setPlayer1Deck)
+    if (selectedPlayer1) {
+      fetchPlayerDeck(selectedPlayer1, setPlayer1Deck)
+    } else {
+      setPlayer1Deck(null)
+    }
   }, [selectedPlayer1, fetchPlayerDeck])
 
   useEffect(() => {
-    fetchPlayerDeck(selectedPlayer2, setPlayer2Deck)
+    if (selectedPlayer2) {
+      fetchPlayerDeck(selectedPlayer2, setPlayer2Deck)
+    } else {
+      setPlayer2Deck(null)
+    }
   }, [selectedPlayer2, fetchPlayerDeck])
 
   // ======================================================
@@ -232,14 +300,31 @@ export default function OfficialMatch() {
     setCreatedMatchId(null)
   }
 
+  // IMPROVED: Better combo name lookup with fallback
   const getComboName = useCallback(
     (comboId: string | null) => {
-      if (!comboId) return 'Combo inconnu'
+      if (!comboId) return 'Aucun combo sélectionné'
+      
+      // First check if we have the combo in our local list
       const combo = combosList.find((c) => c.combo_id === comboId)
-      if (!combo) return 'Combo inconnu'
-      return combo.name
+      if (combo) return combo.name
+
+      // If not found in local list, try to find it in the deck data
+      if (player1Deck) {
+        if (player1Deck.combo_id_1 === comboId) return player1Deck.combo_1_name || 'Combo inconnu'
+        if (player1Deck.combo_id_2 === comboId) return player1Deck.combo_2_name || 'Combo inconnu'
+        if (player1Deck.combo_id_3 === comboId) return player1Deck.combo_3_name || 'Combo inconnu'
+      }
+      
+      if (player2Deck) {
+        if (player2Deck.combo_id_1 === comboId) return player2Deck.combo_1_name || 'Combo inconnu'
+        if (player2Deck.combo_id_2 === comboId) return player2Deck.combo_2_name || 'Combo inconnu'
+        if (player2Deck.combo_id_3 === comboId) return player2Deck.combo_3_name || 'Combo inconnu'
+      }
+
+      return 'Combo inconnu'
     },
-    [combosList]
+    [combosList, player1Deck, player2Deck]
   )
 
   const handleScore = (player: 1 | 2, points: number, action: match_action) => {
@@ -265,7 +350,7 @@ export default function OfficialMatch() {
   }
 
   // ======================================================
-  // 🗄️ Match Creation & Database Storage - UPDATED with official_match_id
+  // 🗄️ Match Creation & Database Storage
   // ======================================================
   const createMatchInDatabase = async (): Promise<string | null> => {
     if (!selectedPlayer1 || !selectedPlayer2 || round === 0) {
@@ -319,7 +404,7 @@ export default function OfficialMatch() {
       timestamp: new Date().toISOString()
     })), null, 2)
 
-    // Prepare match data - UPDATED to include official_match_id
+    // Prepare match data
     const matchData: MatchInsertData = {
       player1_id: selectedPlayer1,
       player2_id: selectedPlayer2,
@@ -328,17 +413,15 @@ export default function OfficialMatch() {
       rounds: round,
       created_by: created_by,
       match_logs: formattedLogs,
-      // Joueur 1
       spin_finishes: spinFinishesP1,
       over_finishes: overFinishesP1,
       burst_finishes: burstFinishesP1,
       xtreme_finishes: xtremeFinishesP1,
-      // Joueur 2
       spin_finishes2: spinFinishesP2,
       over_finishes2: overFinishesP2,
       burst_finishes2: burstFinishesP2,
       xtreme_finishes2: xtremeFinishesP2,
-      official_match_id: officialMatchId, // Added this field
+      official_match_id: officialMatchId,
     }
 
     try {
@@ -370,7 +453,6 @@ export default function OfficialMatch() {
   const updatePlayerStatsAndCreateMatch = async () => {
     if (!selectedPlayer1 || !selectedPlayer2) return
 
-    // First create the match in database
     const matchId = await createMatchInDatabase()
     if (!matchId) {
       return
@@ -378,7 +460,7 @@ export default function OfficialMatch() {
 
     setCreatedMatchId(matchId)
 
-    // Then update player stats
+    // Then update player stats (rest of the function remains the same)
     const statsInit: Omit<player_stats, 'player_id'> = {
       matches_played: 1,
       matches_won: 0,
@@ -404,7 +486,6 @@ export default function OfficialMatch() {
       statsP2.matches_draw = 1
     }
 
-    // COMPTAGE CORRECT PAR JOUEUR
     roundLogs.forEach((log) => {
       if (log.player === 1) {
         if (log.action === 'Spin') statsP1.spin_finishes++
@@ -461,7 +542,7 @@ export default function OfficialMatch() {
   }
 
   // ======================================================
-  // 🛠️ Deck Management Functions - UPDATED table name
+  // 🛠️ Deck Management Functions - IMPROVED with better error handling
   // ======================================================
   const handlePlayerSelectForDeck = async (playerId: string) => {
     setSelectedPlayerForDeck(playerId)
@@ -469,18 +550,51 @@ export default function OfficialMatch() {
     setBeys([])
 
     if (playerId) {
-      // Check for existing deck - UPDATED table name
-      const { data: deckData } = await supabase
-        .from('official_matchs_decks') // CORRECTED TABLE NAME
+      // Check for existing deck with enhanced data
+      const { data: deckData, error } = await supabase
+        .from('official_matches_decks')
         .select('*')
         .eq('player_id', playerId)
         .order('Date_Creation', { ascending: false })
         .limit(1)
         .single()
 
+      if (error) {
+        console.error('Error fetching deck:', error)
+        setExistingDeck(null)
+        return
+      }
+
       if (deckData) {
-        setExistingDeck(deckData)
-        await loadExistingCombos(deckData)
+        // Get combo names for the existing deck
+        const comboIds = [
+          deckData.combo_id_1,
+          deckData.combo_id_2,
+          deckData.combo_id_3,
+        ].filter(Boolean) as string[]
+
+        if (comboIds.length > 0) {
+          const { data: combosData } = await supabase
+            .from('combos')
+            .select('combo_id, name')
+            .in('combo_id', comboIds)
+
+          const comboNameMap = new Map(
+            combosData?.map(combo => [combo.combo_id, combo.name]) || []
+          )
+
+          const enhancedDeck: TournamentDeck = {
+            ...deckData,
+            combo_1_name: deckData.combo_id_1 ? comboNameMap.get(deckData.combo_id_1) : undefined,
+            combo_2_name: deckData.combo_id_2 ? comboNameMap.get(deckData.combo_id_2) : undefined,
+            combo_3_name: deckData.combo_id_3 ? comboNameMap.get(deckData.combo_id_3) : undefined,
+          }
+
+          setExistingDeck(enhancedDeck)
+          await loadExistingCombos(enhancedDeck)
+        } else {
+          setExistingDeck(deckData)
+        }
       } else {
         setExistingDeck(null)
       }
@@ -526,6 +640,7 @@ export default function OfficialMatch() {
     }
   }
 
+  // Rest of the component remains the same...
   const handleComboCountChange = (count: number) => {
     setSelectedComboCount(count)
     
@@ -681,14 +796,14 @@ export default function OfficialMatch() {
       }
 
       if (existingDeck) {
-        // Update existing deck - UPDATED table name
+        // Update existing deck
         const deckUpdate: Record<string, string> = {}
         comboIds.forEach((id, idx) => {
           deckUpdate[`combo_id_${idx + 1}`] = id
         })
 
         const { error: deckError } = await supabase
-          .from("official_matchs_decks") // CORRECTED TABLE NAME
+          .from("official_matches_decks")
           .update(deckUpdate)
           .eq("deck_id", existingDeck.deck_id)
 
@@ -696,7 +811,7 @@ export default function OfficialMatch() {
 
         alert("Deck mis à jour avec succès !")
       } else {
-        // Create new deck - UPDATED table name
+        // Create new deck
         const deckInsert: Record<string, string> = {
           player_id: selectedPlayerForDeck,
         }
@@ -705,7 +820,7 @@ export default function OfficialMatch() {
         })
 
         const { data: deck, error: deckError } = await supabase
-          .from("official_matchs_decks") // CORRECTED TABLE NAME
+          .from("official_matches_decks")
           .insert(deckInsert)
           .select()
           .single()
@@ -731,7 +846,7 @@ export default function OfficialMatch() {
   }
 
   // ======================================================
-  // 🎨 UI (unchanged)
+  // 🎨 UI - IMPROVED deck display
   // ======================================================
   if (admin === null) {
     return (
@@ -787,7 +902,7 @@ export default function OfficialMatch() {
             </div>
           </div>
 
-          {/* Combos + Score */}
+          {/* Combos + Score - IMPROVED display */}
           <div className="flex flex-col gap-4">
             {[1, 2].map((num) => {
               const playerDeck = num === 1 ? player1Deck : player2Deck
@@ -806,22 +921,53 @@ export default function OfficialMatch() {
                       <p className="text-sm text-gray-400 mb-2">
                         Deck sélectionné (le plus récent)
                       </p>
-                      {[playerDeck.combo_id_1, playerDeck.combo_id_2, playerDeck.combo_id_3].map(
-                        (cid, idx) =>
-                          cid && (
-                            <label key={cid} className="block mb-2">
-                              <input
-                                type="radio"
-                                name={`combo${num}`}
-                                value={cid}
-                                checked={(num === 1 ? selectedCombo1 : selectedCombo2) === cid}
-                                onChange={() => setCombo(cid)}
-                                className="mr-2"
-                              />
-                              Combo {idx + 1} - {getComboName(cid)}
-                            </label>
-                          )
-                      )}
+                      <div className="space-y-2">
+                        {playerDeck.combo_id_1 && (
+                          <label className="flex items-center space-x-2 p-2 rounded hover:bg-gray-700/50">
+                            <input
+                              type="radio"
+                              name={`combo${num}`}
+                              value={playerDeck.combo_id_1}
+                              checked={(num === 1 ? selectedCombo1 : selectedCombo2) === playerDeck.combo_id_1}
+                              onChange={() => setCombo(playerDeck.combo_id_1!)}
+                              className="text-pink-500"
+                            />
+                            <span>
+                              Combo 1 - {playerDeck.combo_1_name || getComboName(playerDeck.combo_id_1)}
+                            </span>
+                          </label>
+                        )}
+                        {playerDeck.combo_id_2 && (
+                          <label className="flex items-center space-x-2 p-2 rounded hover:bg-gray-700/50">
+                            <input
+                              type="radio"
+                              name={`combo${num}`}
+                              value={playerDeck.combo_id_2}
+                              checked={(num === 1 ? selectedCombo1 : selectedCombo2) === playerDeck.combo_id_2}
+                              onChange={() => setCombo(playerDeck.combo_id_2!)}
+                              className="text-pink-500"
+                            />
+                            <span>
+                              Combo 2 - {playerDeck.combo_2_name || getComboName(playerDeck.combo_id_2)}
+                            </span>
+                          </label>
+                        )}
+                        {playerDeck.combo_id_3 && (
+                          <label className="flex items-center space-x-2 p-2 rounded hover:bg-gray-700/50">
+                            <input
+                              type="radio"
+                              name={`combo${num}`}
+                              value={playerDeck.combo_id_3}
+                              checked={(num === 1 ? selectedCombo1 : selectedCombo2) === playerDeck.combo_id_3}
+                              onChange={() => setCombo(playerDeck.combo_id_3!)}
+                              className="text-pink-500"
+                            />
+                            <span>
+                              Combo 3 - {playerDeck.combo_3_name || getComboName(playerDeck.combo_id_3)}
+                            </span>
+                          </label>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <p className="text-gray-400">Pas de deck sélectionné</p>
@@ -945,7 +1091,7 @@ export default function OfficialMatch() {
               </div>
             )}
 
-            {/* Beys - FIXED SECTION */}
+            {/* Beys */}
             {selectedComboCount > 0 && beys.slice(0, selectedComboCount).map((bey, index) => (
               <div
                 key={`bey-${index}-${bey.existingComboId || 'new'}`}
@@ -992,7 +1138,6 @@ export default function OfficialMatch() {
                         { key: "bit" as const, options: bits, label: "Bit" },
                       ]
                   ).map(({ key, options, label }) => {
-                    // Ensure selectedValue is always a string or undefined
                     const selectedValue = bey[key] || ""
 
                     return (
