@@ -21,7 +21,7 @@ type RoundLog = {
   loserCombo: string
 }
 
-// Type for match data to be inserted - UPDATED to match your matches table
+// Type for match data to be inserted - UPDATED: removed official_match_id
 type MatchInsertData = {
   player1_id: string | null;
   player2_id: string | null;
@@ -38,10 +38,10 @@ type MatchInsertData = {
   over_finishes2: number | null;
   burst_finishes2: number | null;
   xtreme_finishes2: number | null;
-  official_match_id: string | null;
+  // official_match_id REMOVED
 };
 
-// Types for deck management - UPDATED to include combo names
+// Types for deck management
 type TournamentDeck = {
   player_id: string;
   combo_id_1?: string;
@@ -49,7 +49,7 @@ type TournamentDeck = {
   combo_id_3?: string;
   deck_id: string;
   Date_Creation: string;
-  official_match_id?: string;
+  // official_match_id removed
   // Added combo names for display
   combo_1_name?: string;
   combo_2_name?: string;
@@ -191,8 +191,6 @@ export default function OfficialMatch() {
     async (playerId: string, setDeck: (d: TournamentDeck | null) => void) => {
       if (!playerId) return
       
-      //(`🔍 Fetching deck for player: ${playerId}`);
-      
       // First, get the deck
       const { data: deckData, error: deckError } = await supabase
         .from('official_matchs_decks')
@@ -209,12 +207,9 @@ export default function OfficialMatch() {
       }
 
       if (!deckData) {
-        //(`ℹ️ Aucun deck trouvé pour le joueur: ${playerId}`)
         setDeck(null)
         return
       }
-
-      
 
       // Get all combo IDs from the deck
       const comboIds = [
@@ -223,10 +218,7 @@ export default function OfficialMatch() {
         deckData.combo_id_3,
       ].filter(Boolean) as string[]
 
-      
-
       if (comboIds.length === 0) {
-        //('⚠️ Deck found but no combo IDs');
         setDeck(deckData)
         return
       }
@@ -243,14 +235,10 @@ export default function OfficialMatch() {
         return
       }
 
-      //('🎯 Combos data found:', combosData);
-
       // Create a map of combo_id to combo name
       const comboNameMap = new Map(
         combosData?.map(combo => [combo.combo_id, combo.name]) || []
       )
-
-      //('🗺️ Combo name map:', comboNameMap);
 
       // Enhance deck data with combo names
       const enhancedDeck: TournamentDeck = {
@@ -260,7 +248,6 @@ export default function OfficialMatch() {
         combo_3_name: deckData.combo_id_3 ? comboNameMap.get(deckData.combo_id_3) : undefined,
       }
 
-      //('✨ Enhanced deck:', enhancedDeck);
       setDeck(enhancedDeck)
     },
     []
@@ -350,7 +337,7 @@ export default function OfficialMatch() {
   }
 
   // ======================================================
-  // 🗄️ Match Creation & Database Storage
+  // 🗄️ Match Creation & Database Storage - FIXED
   // ======================================================
   const createMatchInDatabase = async (): Promise<string | null> => {
     if (!selectedPlayer1 || !selectedPlayer2 || round === 0) {
@@ -362,9 +349,6 @@ export default function OfficialMatch() {
       alert('Erreur: Impossible de déterminer l\'administrateur du match')
       return null
     }
-
-    // Generate a unique ID for official_match_id
-    const officialMatchId = crypto.randomUUID()
 
     // Determine winner and loser
     let winner_id: string | null = null
@@ -404,7 +388,7 @@ export default function OfficialMatch() {
       timestamp: new Date().toISOString()
     })), null, 2)
 
-    // Prepare match data
+    // Prepare match data - REMOVED official_match_id
     const matchData: MatchInsertData = {
       player1_id: selectedPlayer1,
       player2_id: selectedPlayer2,
@@ -421,16 +405,16 @@ export default function OfficialMatch() {
       over_finishes2: overFinishesP2,
       burst_finishes2: burstFinishesP2,
       xtreme_finishes2: xtremeFinishesP2,
-      official_match_id: officialMatchId,
+      // official_match_id REMOVED
     }
 
     try {
-      //('📤 Envoi des données du match:', matchData)
+      console.log('📤 Envoi des données du match:', matchData)
       
       const { data, error } = await supabase
         .from('matches')
         .insert([matchData])
-        .select('match_id, official_match_id')
+        .select('match_id')
         .single()
 
       if (error) {
@@ -439,7 +423,7 @@ export default function OfficialMatch() {
         return null
       }
 
-      //('✅ Match créé avec succès, ID:', data.match_id, 'Official Match ID:', data.official_match_id)
+      console.log('✅ Match créé avec succès, ID:', data.match_id)
       return data.match_id
     } catch (error) {
       console.error('❌ Exception lors de la création du match:', error)
@@ -460,7 +444,7 @@ export default function OfficialMatch() {
 
     setCreatedMatchId(matchId)
 
-    // Then update player stats (rest of the function remains the same)
+    // Then update player stats
     const statsInit: Omit<player_stats, 'player_id'> = {
       matches_played: 1,
       matches_won: 0,
@@ -542,7 +526,7 @@ export default function OfficialMatch() {
   }
 
   // ======================================================
-  // 🛠️ Deck Management Functions - IMPROVED with better error handling
+  // 🛠️ Deck Management Functions
   // ======================================================
   const handlePlayerSelectForDeck = async (playerId: string) => {
     setSelectedPlayerForDeck(playerId)
@@ -640,7 +624,6 @@ export default function OfficialMatch() {
     }
   }
 
-  // Rest of the component remains the same...
   const handleComboCountChange = (count: number) => {
     setSelectedComboCount(count)
     
@@ -846,7 +829,7 @@ export default function OfficialMatch() {
   }
 
   // ======================================================
-  // 🎨 UI - IMPROVED deck display
+  // 🎨 UI
   // ======================================================
   if (admin === null) {
     return (
@@ -902,7 +885,7 @@ export default function OfficialMatch() {
             </div>
           </div>
 
-          {/* Combos + Score - IMPROVED display */}
+          {/* Combos + Score */}
           <div className="flex flex-col gap-4">
             {[1, 2].map((num) => {
               const playerDeck = num === 1 ? player1Deck : player2Deck
