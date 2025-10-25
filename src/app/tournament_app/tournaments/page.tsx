@@ -339,7 +339,7 @@ export default function TournamentPage() {
     setMessage("Suppression en cours...");
 
     try {
-      console.log("Starting deletion process for tournament:", tournamentId);
+      //("Starting deletion process for tournament:", tournamentId);
 
       // Delete in the correct order to respect foreign key constraints
       // First delete tournament matches
@@ -386,7 +386,7 @@ export default function TournamentPage() {
         throw tournamentError;
       }
 
-      console.log("Tournament deleted successfully");
+      //("Tournament deleted successfully");
       setMessage("Tournoi supprimé avec succès.");
       await fetchManagementData();
       
