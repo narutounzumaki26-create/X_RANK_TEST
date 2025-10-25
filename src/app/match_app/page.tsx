@@ -41,7 +41,7 @@ type MatchInsertData = {
   official_match_id: string | null; // Added this field
 };
 
-// Types for deck management - UPDATED to match official_matches_decks table
+// Types for deck management - UPDATED to match official_matchs_decks table
 type TournamentDeck = {
   player_id: string;
   combo_id_1?: string;
@@ -188,7 +188,7 @@ export default function OfficialMatch() {
       if (!playerId) return
       
       const { data, error } = await supabase
-        .from('official_matches_decks') // CORRECTED TABLE NAME
+        .from('official_matchs_decks') // CORRECTED TABLE NAME
         .select('*')
         .eq('player_id', playerId)
         .order('Date_Creation', { ascending: false })
@@ -471,7 +471,7 @@ export default function OfficialMatch() {
     if (playerId) {
       // Check for existing deck - UPDATED table name
       const { data: deckData } = await supabase
-        .from('official_matches_decks') // CORRECTED TABLE NAME
+        .from('official_matchs_decks') // CORRECTED TABLE NAME
         .select('*')
         .eq('player_id', playerId)
         .order('Date_Creation', { ascending: false })
@@ -688,7 +688,7 @@ export default function OfficialMatch() {
         })
 
         const { error: deckError } = await supabase
-          .from("official_matches_decks") // CORRECTED TABLE NAME
+          .from("official_matchs_decks") // CORRECTED TABLE NAME
           .update(deckUpdate)
           .eq("deck_id", existingDeck.deck_id)
 
@@ -705,7 +705,7 @@ export default function OfficialMatch() {
         })
 
         const { data: deck, error: deckError } = await supabase
-          .from("official_matches_decks") // CORRECTED TABLE NAME
+          .from("official_matchs_decks") // CORRECTED TABLE NAME
           .insert(deckInsert)
           .select()
           .single()
