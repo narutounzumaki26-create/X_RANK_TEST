@@ -21,7 +21,7 @@ type RoundLog = {
   loserCombo: string
 }
 
-// Type for match data to be inserted
+// Type for match data to be inserted - UPDATED to match your matches table
 type MatchInsertData = {
   player1_id: string | null;
   player2_id: string | null;
@@ -38,19 +38,18 @@ type MatchInsertData = {
   over_finishes2: number | null;
   burst_finishes2: number | null;
   xtreme_finishes2: number | null;
+  official_match_id: string | null; // Added this field
 };
 
-// Types for deck management - UPDATED: match_id is now optional
+// Types for deck management - UPDATED to match official_matches_decks table
 type TournamentDeck = {
-  deck_id: string;
   player_id: string;
-  match_id?: string; // Made optional
   combo_id_1?: string;
   combo_id_2?: string;
   combo_id_3?: string;
-  combo_id_4?: string;
-  combo_id_5?: string;
+  deck_id: string;
   Date_Creation: string;
+  official_match_id?: string; // Made optional to match your table structure
 }
 
 type Bey = {
@@ -182,14 +181,14 @@ export default function OfficialMatch() {
   }, [])
 
   // ======================================================
-  // 🧩 Fetch Decks for Match Players
+  // 🧩 Fetch Decks for Match Players - UPDATED table name
   // ======================================================
   const fetchPlayerDeck = useCallback(
     async (playerId: string, setDeck: (d: TournamentDeck | null) => void) => {
       if (!playerId) return
       
       const { data, error } = await supabase
-        .from('official_matchs_decks')
+        .from('official_matches_decks') // CORRECTED TABLE NAME
         .select('*')
         .eq('player_id', playerId)
         .order('Date_Creation', { ascending: false })
@@ -266,7 +265,7 @@ export default function OfficialMatch() {
   }
 
   // ======================================================
-  // 🗄️ Match Creation & Database Storage
+  // 🗄️ Match Creation & Database Storage - UPDATED with official_match_id
   // ======================================================
   const createMatchInDatabase = async (): Promise<string | null> => {
     if (!selectedPlayer1 || !selectedPlayer2 || round === 0) {
@@ -278,6 +277,9 @@ export default function OfficialMatch() {
       alert('Erreur: Impossible de déterminer l\'administrateur du match')
       return null
     }
+
+    // Generate a unique ID for official_match_id
+    const officialMatchId = crypto.randomUUID()
 
     // Determine winner and loser
     let winner_id: string | null = null
@@ -317,7 +319,7 @@ export default function OfficialMatch() {
       timestamp: new Date().toISOString()
     })), null, 2)
 
-    // Prepare match data
+    // Prepare match data - UPDATED to include official_match_id
     const matchData: MatchInsertData = {
       player1_id: selectedPlayer1,
       player2_id: selectedPlayer2,
@@ -336,6 +338,7 @@ export default function OfficialMatch() {
       over_finishes2: overFinishesP2,
       burst_finishes2: burstFinishesP2,
       xtreme_finishes2: xtremeFinishesP2,
+      official_match_id: officialMatchId, // Added this field
     }
 
     try {
@@ -344,7 +347,7 @@ export default function OfficialMatch() {
       const { data, error } = await supabase
         .from('matches')
         .insert([matchData])
-        .select('match_id')
+        .select('match_id, official_match_id')
         .single()
 
       if (error) {
@@ -353,7 +356,7 @@ export default function OfficialMatch() {
         return null
       }
 
-      console.log('✅ Match créé avec succès, ID:', data.match_id)
+      console.log('✅ Match créé avec succès, ID:', data.match_id, 'Official Match ID:', data.official_match_id)
       return data.match_id
     } catch (error) {
       console.error('❌ Exception lors de la création du match:', error)
@@ -458,7 +461,7 @@ export default function OfficialMatch() {
   }
 
   // ======================================================
-  // 🛠️ Deck Management Functions - UPDATED: No match_id required
+  // 🛠️ Deck Management Functions - UPDATED table name
   // ======================================================
   const handlePlayerSelectForDeck = async (playerId: string) => {
     setSelectedPlayerForDeck(playerId)
@@ -466,9 +469,9 @@ export default function OfficialMatch() {
     setBeys([])
 
     if (playerId) {
-      // Check for existing deck
+      // Check for existing deck - UPDATED table name
       const { data: deckData } = await supabase
-        .from('official_matchs_decks')
+        .from('official_matches_decks') // CORRECTED TABLE NAME
         .select('*')
         .eq('player_id', playerId)
         .order('Date_Creation', { ascending: false })
@@ -678,14 +681,14 @@ export default function OfficialMatch() {
       }
 
       if (existingDeck) {
-        // Update existing deck - UPDATED: No match_id included
+        // Update existing deck - UPDATED table name
         const deckUpdate: Record<string, string> = {}
         comboIds.forEach((id, idx) => {
           deckUpdate[`combo_id_${idx + 1}`] = id
         })
 
         const { error: deckError } = await supabase
-          .from("official_matchs_decks")
+          .from("official_matches_decks") // CORRECTED TABLE NAME
           .update(deckUpdate)
           .eq("deck_id", existingDeck.deck_id)
 
@@ -693,7 +696,7 @@ export default function OfficialMatch() {
 
         alert("Deck mis à jour avec succès !")
       } else {
-        // Create new deck - UPDATED: No match_id included
+        // Create new deck - UPDATED table name
         const deckInsert: Record<string, string> = {
           player_id: selectedPlayerForDeck,
         }
@@ -702,7 +705,7 @@ export default function OfficialMatch() {
         })
 
         const { data: deck, error: deckError } = await supabase
-          .from("official_matchs_decks")
+          .from("official_matches_decks") // CORRECTED TABLE NAME
           .insert(deckInsert)
           .select()
           .single()
@@ -728,7 +731,7 @@ export default function OfficialMatch() {
   }
 
   // ======================================================
-  // 🎨 UI
+  // 🎨 UI (unchanged)
   // ======================================================
   if (admin === null) {
     return (
