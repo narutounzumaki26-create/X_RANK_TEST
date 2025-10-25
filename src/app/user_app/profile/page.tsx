@@ -448,7 +448,7 @@ export default function ProfileStatsPage() {
                         {match.player1?.player_name || 'Joueur 1'} vs {match.player2?.player_name || 'Joueur 2'}
                       </div>
                       <div className="text-sm text-gray-300">
-                        Tournoi: {match.tournaments?.name || 'N/A'} • Rounds: {match.rounds}
+                        {match.tournaments?.name || 'Match Officiel'} • Rounds: {match.rounds}
                       </div>
                     </div>
                     <div className="text-right">
