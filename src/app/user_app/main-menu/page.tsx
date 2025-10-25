@@ -128,6 +128,14 @@ export default async function MainMenuPage() {
       gradient: "from-slate-500/70 via-slate-600/70 to-gray-800/60",
       shadow: "shadow-[0_0_22px_rgba(148,163,184,0.25)] hover:shadow-[0_0_28px_rgba(200,213,225,0.45)]",
     },
+        {
+      href: "/match_app/Match_Officiel",
+      label: "Match Officiel",
+      icon: "🌀",
+      description: "Creation et gestion de matchs Officiel",
+      gradient: "from-slate-500/70 via-blue-600/70 to-red-800/60",
+      shadow: "shadow-[0_0_22px_rgba(148,163,184,0.25)] hover:shadow-[0_0_28px_rgba(200,213,225,0.45)]",
+    },
   ];
 
   // --- Fonction serveur de déconnexion ---
