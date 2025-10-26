@@ -110,7 +110,7 @@ export default function TournamentPage() {
       setTournamentsList(tournamentsData ?? []);
 
       const active = (tournamentsData ?? []).filter((t) =>
-        t.status === "planned" || t.status === "ongoing"
+        t.status === "planned" || t.status === "ongoing" || t.status === "cancelled"
       );
 
       if (active.length === 0) {
@@ -314,6 +314,7 @@ export default function TournamentPage() {
       date,
       max_combos: maxCombos,
       created_by: playerData.player_id,
+      status: "planned",
     });
 
     if (error) {
@@ -330,6 +331,38 @@ export default function TournamentPage() {
     setMessage("Tournoi créé avec succès.");
   };
 
+  const handleCancelTournament = async (tournamentId: string) => {
+    if (!confirm("Êtes-vous sûr de vouloir annuler ce tournoi ?")) {
+      return;
+    }
+
+    setMessage("Annulation en cours...");
+
+    try {
+      const { error } = await supabase
+        .from("tournaments")
+        .update({ status: "cancelled" })
+        .eq("tournament_id", tournamentId);
+
+      if (error) {
+        console.error("Erreur lors de l&apos;annulation du tournoi:", error);
+        throw error;
+      }
+
+      setMessage("Tournoi annulé avec succès.");
+      await fetchManagementData();
+      
+    } catch (err) {
+      console.error("Erreur détaillée:", err);
+      setMessage(
+        err instanceof Error 
+          ? `Erreur lors de l&apos;annulation: ${err.message}` 
+          : "Erreur inconnue lors de l&apos;annulation du tournoi."
+      );
+    }
+  };
+
+  // 🔹 CORRECTION : Fonction de suppression simplifiée et corrigée
   const handleDeleteTournament = async (tournamentId: string) => {
     if (!confirm("Êtes-vous sûr de vouloir supprimer ce tournoi ? Cette action est irréversible.")) {
       return;
@@ -338,58 +371,74 @@ export default function TournamentPage() {
     setMessage("Suppression en cours...");
 
     try {
-      // First delete tournament matches
-      const { error: matchesError } = await supabase
-        .from("tournament_decks")
-        .delete()
-        .eq("tournament_id", tournamentId);
+      console.log("🔹 Début de la suppression du tournoi:", tournamentId);
 
-      if (matchesError && !matchesError.message.includes("No rows found")) {
-        console.error("Error deleting matches:", matchesError);
+      // 🔹 CORRECTION : Vérifier d'abord s'il y a des données liées
+      const { data: matchesData } = await supabase
+        .from("matches")
+        .select("match_id")
+        .eq("tournament_id", tournamentId)
+        .limit(1);
+
+      if (matchesData && matchesData.length > 0) {
+        // Supprimer les matchs associés
+        const { error: matchesError } = await supabase
+          .from("matches")
+          .delete()
+          .eq("tournament_id", tournamentId);
+
+        if (matchesError) {
+          console.error("Erreur suppression matchs:", matchesError);
+          // Continuer malgré l'erreur
+        }
       }
 
-      // Delete tournament decks
-      const { error: decksError } = await supabase
-        .from("tournament_decks")
-        .delete()
-        .eq("tournament_id", tournamentId);
-
-      if (decksError) {
-        console.error("Error deleting decks:", decksError);
-        throw decksError;
-      }
-
-      // Delete tournament participants
+      // Supprimer les participants
       const { error: participantsError } = await supabase
         .from("tournament_participants")
         .delete()
         .eq("tournament_id", tournamentId);
 
       if (participantsError) {
-        console.error("Error deleting participants:", participantsError);
+        console.error("Erreur suppression participants:", participantsError);
         throw participantsError;
       }
 
-      // Finally delete the tournament itself
+      // Supprimer les decks
+      const { error: decksError } = await supabase
+        .from("tournament_decks")
+        .delete()
+        .eq("tournament_id", tournamentId);
+
+      if (decksError) {
+        console.error("Erreur suppression decks:", decksError);
+        throw decksError;
+      }
+
+      // Enfin supprimer le tournoi
       const { error: tournamentError } = await supabase
         .from("tournaments")
         .delete()
         .eq("tournament_id", tournamentId);
 
       if (tournamentError) {
-        console.error("Error deleting tournament:", tournamentError);
+        console.error("Erreur suppression tournoi:", tournamentError);
         throw tournamentError;
       }
 
+      console.log("✅ Tournoi supprimé avec succès");
       setMessage("Tournoi supprimé avec succès.");
-      await fetchManagementData();
+      
+      // 🔹 CORRECTION : Mettre à jour l'état local immédiatement
+      setTournamentsList(prev => prev.filter(t => t.tournament_id !== tournamentId));
+      setManagedTournaments(prev => prev.filter(t => t.tournament_id !== tournamentId));
       
     } catch (err) {
-      console.error("Detailed deletion error:", err);
+      console.error("❌ Erreur détaillée de suppression:", err);
       setMessage(
         err instanceof Error 
           ? `Erreur lors de la suppression: ${err.message}` 
-          : "Erreur inconnue lors de la suppression du tournoi. Vérifiez la console pour plus de détails."
+          : "Erreur inconnue lors de la suppression. Vérifiez la console."
       );
     }
   };
@@ -708,11 +757,19 @@ export default function TournamentPage() {
                         >
                           Gérer les matchs
                         </Button>
+                        {(tournament.status === "planned" || tournament.status === "ongoing") && (
+                          <Button
+                            className="bg-orange-500 text-white hover:bg-orange-600 border border-orange-400/60"
+                            onClick={() => handleCancelTournament(tournament.tournament_id)}
+                          >
+                            Annuler
+                          </Button>
+                        )}
                         <Button
                           className="bg-emerald-500 text-black hover:bg-emerald-400"
                           onClick={() => handleFinishTournament(tournament.tournament_id)}
                         >
-                          Terminer le tournoi
+                          Terminer
                         </Button>
                         <Button
                           className="bg-red-500/80 text-white hover:bg-red-500 border border-red-400/60"
