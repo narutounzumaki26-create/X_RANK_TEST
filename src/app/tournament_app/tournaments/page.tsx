@@ -21,8 +21,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { players, tournaments } from "@/app/tournament_app/tournament";
 import { MainMenuButton } from "@/components/navigation/MainMenuButton";
+
+// Types basés sur les tables fournies
+type tournaments = {
+  tournament_id: string;
+  name: string;
+  location: string | null;
+  date: string;
+  winner_id: string | null;
+  status: string;
+  max_combos: number;
+  created_by: string | null;
+  description: string | null;
+};
+
+type players = {
+  player_id: string;
+  player_name: string;
+  user_id: string;
+  Admin: boolean;
+};
 
 type ParticipantRow = {
   inscription_id: string;
@@ -103,8 +122,7 @@ export default function TournamentPage() {
       const { data: tournamentsData, error: tournamentsError } = await supabase
         .from("tournaments")
         .select("*")
-        .order("date", { ascending: true })
-        .returns<tournaments[]>();
+        .order("date", { ascending: true });
 
       if (tournamentsError) throw tournamentsError;
 
@@ -264,7 +282,7 @@ export default function TournamentPage() {
         .from("players")
         .select("Admin")
         .eq("user_id", user.id)
-        .single<players>();
+        .single();
 
       if (error || !player || !player.Admin) {
         router.push("/");
@@ -293,7 +311,7 @@ export default function TournamentPage() {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData?.user;
     if (!user) {
-      setMessage("Impossible de récupérer l&apos;utilisateur connecté.");
+      setMessage("Impossible de récupérer l'utilisateur connecté.");
       return;
     }
 
@@ -301,10 +319,10 @@ export default function TournamentPage() {
       .from("players")
       .select("player_id")
       .eq("user_id", user.id)
-      .single<{ player_id: string }>();
+      .single();
 
     if (playerError || !playerData) {
-      setMessage("Impossible de récupérer le player_id de l&apos;admin.");
+      setMessage("Impossible de récupérer le player_id de l'admin.");
       return;
     }
 
@@ -339,9 +357,6 @@ export default function TournamentPage() {
     setMessage("Suppression en cours...");
 
     try {
-      //("Starting deletion process for tournament:", tournamentId);
-
-      // Delete in the correct order to respect foreign key constraints
       // First delete tournament matches
       const { error: matchesError } = await supabase
         .from("tournament_decks")
@@ -350,7 +365,6 @@ export default function TournamentPage() {
 
       if (matchesError && !matchesError.message.includes("No rows found")) {
         console.error("Error deleting matches:", matchesError);
-        // Continue anyway, as matches might not exist for this tournament
       }
 
       // Delete tournament decks
@@ -386,7 +400,6 @@ export default function TournamentPage() {
         throw tournamentError;
       }
 
-      //("Tournament deleted successfully");
       setMessage("Tournoi supprimé avec succès.");
       await fetchManagementData();
       
@@ -413,7 +426,7 @@ export default function TournamentPage() {
       .eq("inscription_id", participant.inscription_id);
 
     if (error) {
-      setMessage(`Erreur lors de l&apos;association du deck : ${error.message}`);
+      setMessage(`Erreur lors de l'association du deck : ${error.message}`);
       return;
     }
 
@@ -573,7 +586,7 @@ export default function TournamentPage() {
         header={{ title: "⚡ Gestion des Tournois", actions: <MainMenuButton /> }}
       >
         <p className="text-sm uppercase tracking-[0.3em] text-cyan-200">
-          Initialisation de l&apos;interface...
+          Initialisation de l'interface...
         </p>
       </CyberPage>
     );
