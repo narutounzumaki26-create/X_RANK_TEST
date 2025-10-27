@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+
+import { supabase } from '@/lib/supabase'
+
 // Types defined directly in the component file
 interface Match {
   match_id: string
@@ -24,53 +26,80 @@ interface Match {
 }
 
 interface Player {
-  player_id: string
+  id: string
   name: string
-}
-
-interface Tournament {
-  tournament_id: string
-  name: string
+  // Try different possible column names
+  player_id?: string
 }
 
 export default function MatchManager() {
   const [matches, setMatches] = useState<Match[]>([])
   const [players, setPlayers] = useState<Player[]>([])
-  const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [error, setError] = useState<string | null>(null)
 
   // Fetch all data
   const fetchData = async (): Promise<void> => {
     try {
+      setError(null)
+      console.log('Starting to fetch data...')
+
       // Fetch matches
       const { data: matchesData, error: matchesError } = await supabase
         .from('matches')
         .select('*')
         .order('rounds', { ascending: false })
 
-      if (matchesError) throw matchesError
+      if (matchesError) {
+        console.error('Matches error:', matchesError)
+        throw new Error(`Matches: ${matchesError.message}`)
+      }
 
-      // Fetch players
-      const { data: playersData, error: playersError } = await supabase
-        .from('players')
-        .select('player_id, name')
+      console.log('Matches fetched:', matchesData?.length)
 
-      if (playersError) throw playersError
+      // Try to fetch players - handle different possible table names and column names
+      let playersData: Player[] = []
+      let playersError = null
 
-      // Fetch tournaments
-      const { data: tournamentsData, error: tournamentsError } = await supabase
-        .from('tournaments')
-        .select('tournament_id, name')
+      // Try different table names and column combinations
+      const playerQueries = [
+        supabase.from('players').select('id, name'),
+        supabase.from('players').select('player_id, name'),
+        supabase.from('player').select('id, name'),
+        supabase.from('player').select('player_id, name'),
+        supabase.from('users').select('id, name'),
+        supabase.from('users').select('user_id, name')
+      ]
 
-      if (tournamentsError) throw tournamentsError
+      for (const query of playerQueries) {
+        const { data, error } = await query
+        if (!error && data && data.length > 0) {
+          playersData = data.map((p: any) => ({
+            id: p.id || p.player_id || p.user_id,
+            name: p.name,
+            player_id: p.player_id
+          }))
+          console.log('Players found in table:', playersData.length)
+          break
+        }
+        if (error) {
+          playersError = error
+        }
+      }
+
+      // If no players found, create empty array and continue
+      if (playersData.length === 0) {
+        console.warn('No players table found or no players in database')
+        playersData = []
+      }
 
       setMatches(matchesData || [])
-      setPlayers(playersData || [])
-      setTournaments(tournamentsData || [])
-    } catch (error) {
-      console.error('Error fetching data:', error)
-      alert('Error loading data')
+      setPlayers(playersData)
+
+    } catch (error: any) {
+      console.error('Error in fetchData:', error)
+      setError(error.message || 'Error loading data')
     } finally {
       setLoading(false)
     }
@@ -80,18 +109,22 @@ export default function MatchManager() {
     fetchData()
   }, [])
 
-  // Get player name by ID
+  // Get player name by ID - handle different ID formats
   const getPlayerName = (playerId: string | undefined): string => {
     if (!playerId) return 'N/A'
-    const player = players.find(p => p.player_id === playerId)
-    return player ? player.name : `Unknown (${playerId.slice(0, 8)}...)`
+    
+    // Try to find player by different ID fields
+    const player = players.find(p => 
+      p.id === playerId || 
+      p.player_id === playerId
+    )
+    
+    return player ? player.name : `Player (${playerId.slice(0, 8)}...)`
   }
 
-  // Get tournament name by ID
+  // Get tournament type
   const getTournamentType = (tournamentId: string | undefined): string => {
-    if (!tournamentId) return 'Match Officiel'
-    const tournament = tournaments.find(t => t.tournament_id === tournamentId)
-    return tournament ? tournament.name : `Tournament (${tournamentId.slice(0, 8)}...)`
+    return tournamentId ? `Tournament` : 'Match Officiel'
   }
 
   // Delete match function
@@ -110,15 +143,20 @@ export default function MatchManager() {
 
       if (error) throw error
 
-      // Remove from local state
       setMatches(matches.filter((match: Match) => match.match_id !== matchId))
       alert('Match deleted successfully')
-    } catch (error) {
+    } catch (error: any) {
       console.error('Error deleting match:', error)
-      alert('Error deleting match')
+      alert(`Error deleting match: ${error.message}`)
     } finally {
       setDeleting(null)
     }
+  }
+
+  // Retry loading data
+  const handleRetry = () => {
+    setLoading(true)
+    fetchData()
   }
 
   if (loading) {
@@ -129,18 +167,59 @@ export default function MatchManager() {
     )
   }
 
+  if (error) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <h2 className="text-red-800 text-xl font-semibold mb-2">Error</h2>
+          <p className="text-red-600 mb-4">{error}</p>
+          <div className="space-y-4">
+            <button
+              onClick={handleRetry}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md"
+            >
+              Try Again
+            </button>
+            <div className="text-sm text-red-500">
+              <p>Possible issues:</p>
+              <ul className="list-disc list-inside mt-2">
+                <li>Database tables might not exist</li>
+                <li>Check if Supabase connection is configured</li>
+                <li>Verify table names and columns match the schema</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="p-6 max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-6">
         <h1 className="text-3xl font-bold text-gray-900">Match Manager</h1>
-        <div className="text-sm text-gray-500">
-          {matches.length} match{matches.length !== 1 ? 'es' : ''} found
+        <div className="flex items-center space-x-4">
+          <div className="text-sm text-gray-500">
+            {matches.length} match{matches.length !== 1 ? 'es' : ''} found
+          </div>
+          <button
+            onClick={handleRetry}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+          >
+            Refresh
+          </button>
         </div>
       </div>
 
       {matches.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg shadow">
-          <p className="text-gray-500 text-lg">No matches found</p>
+          <p className="text-gray-500 text-lg mb-4">No matches found in database</p>
+          <button
+            onClick={handleRetry}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded"
+          >
+            Refresh Data
+          </button>
         </div>
       ) : (
         <div className="bg-white shadow-md rounded-lg overflow-hidden">
@@ -176,6 +255,11 @@ export default function MatchManager() {
                         match.tournament_id ? 'text-purple-600' : 'text-green-600'
                       }`}>
                         {getTournamentType(match.tournament_id)}
+                        {match.tournament_id && (
+                          <div className="text-xs text-gray-500">
+                            ID: {match.tournament_id.slice(0, 8)}...
+                          </div>
+                        )}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -207,12 +291,6 @@ export default function MatchManager() {
                       </div>
                       <div className="text-sm text-gray-900">
                         <span className="font-medium">Over:</span> {match.over_finishes || 0}/{match.over_finishes2 || 0}
-                      </div>
-                      <div className="text-sm text-gray-900">
-                        <span className="font-medium">Burst:</span> {match.burst_finishes || 0}/{match.burst_finishes2 || 0}
-                      </div>
-                      <div className="text-sm text-gray-900">
-                        <span className="font-medium">Xtreme:</span> {match.xtreme_finishes || 0}/{match.xtreme_finishes2 || 0}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
