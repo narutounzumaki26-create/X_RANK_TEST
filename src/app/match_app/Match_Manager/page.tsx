@@ -1,9 +1,7 @@
-// components/MatchManager.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-
+import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabaseClient'
 // Types defined directly in the component file
 interface Match {
   match_id: string
