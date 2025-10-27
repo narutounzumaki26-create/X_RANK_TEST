@@ -84,6 +84,7 @@ export default function TournamentPage() {
   const [admin, setAdmin] = useState<boolean | null>(null);
   const [loadingData, setLoadingData] = useState(true);
   const [message, setMessage] = useState<string>("");
+  const [deletingTournaments, setDeletingTournaments] = useState<Record<string, boolean>>({});
 
   const [managedTournaments, setManagedTournaments] = useState<TournamentDetails[]>([]);
   const [winnerSelections, setWinnerSelections] = useState<Record<string, string | undefined>>({});
@@ -329,41 +330,98 @@ export default function TournamentPage() {
   };
 
   const handleDeleteTournament = async (tournamentId: string) => {
+    console.log("Delete button clicked for tournament:", tournamentId);
+    
     if (!confirm("Êtes-vous sûr de vouloir supprimer ce tournoi ? Cette action est irréversible.")) {
       return;
     }
 
-    setMessage("");
+    setDeletingTournaments(prev => ({ ...prev, [tournamentId]: true }));
+    setMessage("Suppression en cours...");
 
     try {
-      // First delete related records to maintain referential integrity
+      // First, check if there are any matches associated with this tournament
+      const { data: matchesData, error: matchesError } = await supabase
+        .from("matches")
+        .select("match_id")
+        .eq("tournament_id", tournamentId);
+
+      if (matchesError) {
+        console.error("Matches error:", matchesError);
+        throw matchesError;
+      }
+
+      // Delete matches if they exist
+      if (matchesData && matchesData.length > 0) {
+        console.log("Deleting matches:", matchesData.length);
+        const { error: matchesDeleteError } = await supabase
+          .from("matches")
+          .delete()
+          .eq("tournament_id", tournamentId);
+
+        if (matchesDeleteError) {
+          console.error("Matches delete error:", matchesDeleteError);
+          throw matchesDeleteError;
+        }
+      }
+
+      // Delete tournament participants
+      console.log("Deleting participants...");
       const { error: participantsError } = await supabase
         .from("tournament_participants")
         .delete()
         .eq("tournament_id", tournamentId);
 
-      if (participantsError) throw participantsError;
+      if (participantsError) {
+        console.error("Participants error:", participantsError);
+        throw participantsError;
+      }
 
+      // Delete tournament decks
+      console.log("Deleting decks...");
       const { error: decksError } = await supabase
         .from("tournament_decks")
         .delete()
         .eq("tournament_id", tournamentId);
 
-      if (decksError) throw decksError;
+      if (decksError) {
+        console.error("Decks error:", decksError);
+        throw decksError;
+      }
 
-      // Then delete the tournament
+      // Finally delete the tournament itself
+      console.log("Deleting tournament...");
       const { error } = await supabase
         .from("tournaments")
         .delete()
         .eq("tournament_id", tournamentId);
 
-      if (error) throw error;
+      if (error) {
+        console.error("Tournament delete error:", error);
+        throw error;
+      }
 
-      await fetchManagementData();
+      console.log("Tournament deleted successfully");
+      
+      // Update the UI by filtering out the deleted tournament
+      setManagedTournaments(prev => 
+        prev.filter(tournament => tournament.tournament_id !== tournamentId)
+      );
+      
       setMessage("Tournoi supprimé avec succès.");
+      
+      // Clear success message after 3 seconds
+      setTimeout(() => setMessage(""), 3000);
+      
     } catch (err) {
-      console.error("Erreur suppression tournoi:", err);
-      setMessage(err instanceof Error ? err.message : "Erreur lors de la suppression");
+      console.error("Erreur détaillée suppression tournoi:", err);
+      const errorMessage = err instanceof Error ? err.message : "Erreur inconnue lors de la suppression";
+      setMessage(`Erreur: ${errorMessage}`);
+      
+      // Clear error message after 5 seconds
+      setTimeout(() => setMessage(""), 5000);
+    } finally {
+      setDeletingTournaments(prev => ({ ...prev, [tournamentId]: false }));
     }
   };
 
@@ -682,10 +740,11 @@ export default function TournamentPage() {
                           Gérer les matchs
                         </Button>
                         <Button
-                          className="bg-red-500/80 text-white border border-red-400/60 hover:bg-red-500"
+                          className="bg-red-500/80 text-white border border-red-400/60 hover:bg-red-500 disabled:opacity-50"
                           onClick={() => handleDeleteTournament(tournament.tournament_id)}
+                          disabled={deletingTournaments[tournament.tournament_id]}
                         >
-                          Supprimer
+                          {deletingTournaments[tournament.tournament_id] ? "Suppression..." : "Supprimer"}
                         </Button>
                         <Button
                           className="bg-emerald-500 text-black hover:bg-emerald-400"
