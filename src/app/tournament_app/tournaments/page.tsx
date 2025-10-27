@@ -21,7 +21,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import type { tournaments } from "@/app/tournament_app/tournament";
+import type { players, tournaments } from "@/app/tournament_app/tournament";
 import { MainMenuButton } from "@/components/navigation/MainMenuButton";
 
 type ParticipantRow = {
@@ -103,14 +103,15 @@ export default function TournamentPage() {
       const { data: tournamentsData, error: tournamentsError } = await supabase
         .from("tournaments")
         .select("*")
-        .order("date", { ascending: true });
+        .order("date", { ascending: true })
+        .returns<tournaments[]>();
 
       if (tournamentsError) throw tournamentsError;
 
       setTournamentsList(tournamentsData ?? []);
 
       const active = (tournamentsData ?? []).filter((t) =>
-        t.status === "planned" || t.status === "ongoing" || t.status === "cancelled"
+        t.status === "planned" || t.status === "ongoing"
       );
 
       if (active.length === 0) {
@@ -263,7 +264,7 @@ export default function TournamentPage() {
         .from("players")
         .select("Admin")
         .eq("user_id", user.id)
-        .single();
+        .single<players>();
 
       if (error || !player || !player.Admin) {
         router.push("/");
@@ -292,7 +293,7 @@ export default function TournamentPage() {
     const { data: authData } = await supabase.auth.getUser();
     const user = authData?.user;
     if (!user) {
-      setMessage("Impossible de récupérer l&apos;utilisateur connecté.");
+      setMessage("Impossible de récupérer l'utilisateur connecté.");
       return;
     }
 
@@ -300,10 +301,10 @@ export default function TournamentPage() {
       .from("players")
       .select("player_id")
       .eq("user_id", user.id)
-      .single();
+      .single<{ player_id: string }>();
 
     if (playerError || !playerData) {
-      setMessage("Impossible de récupérer le player_id de l&apos;admin.");
+      setMessage("Impossible de récupérer le player_id de l'admin.");
       return;
     }
 
@@ -314,7 +315,6 @@ export default function TournamentPage() {
       date,
       max_combos: maxCombos,
       created_by: playerData.player_id,
-      status: "planned",
     });
 
     if (error) {
@@ -331,115 +331,42 @@ export default function TournamentPage() {
     setMessage("Tournoi créé avec succès.");
   };
 
-  const handleCancelTournament = async (tournamentId: string) => {
-    if (!confirm("Êtes-vous sûr de vouloir annuler ce tournoi ?")) {
-      return;
-    }
-
-    setMessage("Annulation en cours...");
-
-    try {
-      const { error } = await supabase
-        .from("tournaments")
-        .update({ status: "cancelled" })
-        .eq("tournament_id", tournamentId);
-
-      if (error) {
-        console.error("Erreur lors de l&apos;annulation du tournoi:", error);
-        throw error;
-      }
-
-      setMessage("Tournoi annulé avec succès.");
-      await fetchManagementData();
-      
-    } catch (err) {
-      console.error("Erreur détaillée:", err);
-      setMessage(
-        err instanceof Error 
-          ? `Erreur lors de l&apos;annulation: ${err.message}` 
-          : "Erreur inconnue lors de l&apos;annulation du tournoi."
-      );
-    }
-  };
-
-  // 🔹 CORRECTION : Fonction de suppression simplifiée et corrigée
   const handleDeleteTournament = async (tournamentId: string) => {
     if (!confirm("Êtes-vous sûr de vouloir supprimer ce tournoi ? Cette action est irréversible.")) {
       return;
     }
 
-    setMessage("Suppression en cours...");
+    setMessage("");
 
     try {
-      console.log("🔹 Début de la suppression du tournoi:", tournamentId);
-
-      // 🔹 CORRECTION : Vérifier d'abord s'il y a des données liées
-      const { data: matchesData } = await supabase
-        .from("matches")
-        .select("match_id")
-        .eq("tournament_id", tournamentId)
-        .limit(1);
-
-      if (matchesData && matchesData.length > 0) {
-        // Supprimer les matchs associés
-        const { error: matchesError } = await supabase
-          .from("matches")
-          .delete()
-          .eq("tournament_id", tournamentId);
-
-        if (matchesError) {
-          console.error("Erreur suppression matchs:", matchesError);
-          // Continuer malgré l'erreur
-        }
-      }
-
-      // Supprimer les participants
+      // First delete related records to maintain referential integrity
       const { error: participantsError } = await supabase
         .from("tournament_participants")
         .delete()
         .eq("tournament_id", tournamentId);
 
-      if (participantsError) {
-        console.error("Erreur suppression participants:", participantsError);
-        throw participantsError;
-      }
+      if (participantsError) throw participantsError;
 
-      // Supprimer les decks
       const { error: decksError } = await supabase
         .from("tournament_decks")
         .delete()
         .eq("tournament_id", tournamentId);
 
-      if (decksError) {
-        console.error("Erreur suppression decks:", decksError);
-        throw decksError;
-      }
+      if (decksError) throw decksError;
 
-      // Enfin supprimer le tournoi
-      const { error: tournamentError } = await supabase
+      // Then delete the tournament
+      const { error } = await supabase
         .from("tournaments")
         .delete()
         .eq("tournament_id", tournamentId);
 
-      if (tournamentError) {
-        console.error("Erreur suppression tournoi:", tournamentError);
-        throw tournamentError;
-      }
+      if (error) throw error;
 
-      console.log("✅ Tournoi supprimé avec succès");
+      await fetchManagementData();
       setMessage("Tournoi supprimé avec succès.");
-      
-      // 🔹 CORRECTION : Mettre à jour l'état local immédiatement
-      setTournamentsList(prev => prev.filter(t => t.tournament_id !== tournamentId));
-      setManagedTournaments(prev => prev.filter(t => t.tournament_id !== tournamentId));
-      
     } catch (err) {
-      console.error("❌ Erreur détaillée de suppression:", err);
-      setMessage(
-        err instanceof Error 
-          ? `Erreur lors de la suppression: ${err.message}` 
-          : "Erreur inconnue lors de la suppression. Vérifiez la console."
-      );
+      console.error("Erreur suppression tournoi:", err);
+      setMessage(err instanceof Error ? err.message : "Erreur lors de la suppression");
     }
   };
 
@@ -456,7 +383,7 @@ export default function TournamentPage() {
       .eq("inscription_id", participant.inscription_id);
 
     if (error) {
-      setMessage(`Erreur lors de l&apos;association du deck : ${error.message}`);
+      setMessage(`Erreur lors de l'association du deck : ${error.message}`);
       return;
     }
 
@@ -616,7 +543,7 @@ export default function TournamentPage() {
         header={{ title: "⚡ Gestion des Tournois", actions: <MainMenuButton /> }}
       >
         <p className="text-sm uppercase tracking-[0.3em] text-cyan-200">
-          Initialisation de l&apos;interface...
+          Initialisation de l'interface...
         </p>
       </CyberPage>
     );
@@ -757,25 +684,17 @@ export default function TournamentPage() {
                         >
                           Gérer les matchs
                         </Button>
-                        {(tournament.status === "planned" || tournament.status === "ongoing") && (
-                          <Button
-                            className="bg-orange-500 text-white hover:bg-orange-600 border border-orange-400/60"
-                            onClick={() => handleCancelTournament(tournament.tournament_id)}
-                          >
-                            Annuler
-                          </Button>
-                        )}
+                        <Button
+                          className="bg-red-500/80 text-white border border-red-400/60 hover:bg-red-500"
+                          onClick={() => handleDeleteTournament(tournament.tournament_id)}
+                        >
+                          Supprimer
+                        </Button>
                         <Button
                           className="bg-emerald-500 text-black hover:bg-emerald-400"
                           onClick={() => handleFinishTournament(tournament.tournament_id)}
                         >
-                          Terminer
-                        </Button>
-                        <Button
-                          className="bg-red-500/80 text-white hover:bg-red-500 border border-red-400/60"
-                          onClick={() => handleDeleteTournament(tournament.tournament_id)}
-                        >
-                          Supprimer
+                          Terminer le tournoi
                         </Button>
                       </div>
                     </div>
@@ -871,48 +790,6 @@ export default function TournamentPage() {
                       );
                     })
                   )}
-                </CardContent>
-              </Card>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="space-y-4">
-        <h2 className="text-2xl font-semibold text-white">Historique des tournois</h2>
-        {tournamentsList.length === 0 ? (
-          <p className="text-sm text-gray-300">Aucun tournoi enregistré pour le moment.</p>
-        ) : (
-          <div className="grid gap-4">
-            {tournamentsList.map((t) => (
-              <Card
-                key={t.tournament_id}
-                className="bg-gray-900/60 text-white border border-gray-700/60 shadow-md"
-              >
-                <CardContent className="flex flex-col gap-2 p-5 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold">{t.name}</h3>
-                    <p className="text-sm text-gray-300">
-                      {t.date} {t.location && `- ${t.location}`} • Statut : {t.status}
-                    </p>
-                    {t.description && (
-                      <p className="text-xs text-gray-400">{t.description}</p>
-                    )}
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <Button
-                      className="bg-yellow-500/20 text-yellow-200 border border-yellow-400/70 hover:bg-yellow-500/30"
-                      onClick={() => handleManageMatches(t.tournament_id)}
-                    >
-                      Gérer
-                    </Button>
-                    <Button
-                      className="bg-red-500/20 text-red-200 border border-red-400/70 hover:bg-red-500/30"
-                      onClick={() => handleDeleteTournament(t.tournament_id)}
-                    >
-                      Supprimer
-                    </Button>
-                  </div>
                 </CardContent>
               </Card>
             ))}
