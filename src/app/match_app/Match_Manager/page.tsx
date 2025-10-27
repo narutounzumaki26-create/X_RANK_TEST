@@ -1,8 +1,9 @@
 // components/MatchManager.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { useRouter } from 'next/navigation'
+import { useEffect, useState, useCallback } from 'react'
+import { supabase } from '@/lib/supabaseClient'
 
 // Types defined directly in the component file
 interface Match {
