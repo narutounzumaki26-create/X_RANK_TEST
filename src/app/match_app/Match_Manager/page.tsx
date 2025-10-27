@@ -1,7 +1,7 @@
+// components/MatchManager.tsx
 'use client'
 
-import { useEffect, useState } from 'react'
-
+import { useState, useEffect } from 'react'
 import { supabase } from "@/lib/supabaseClient";
 
 // Types defined directly in the component file
@@ -26,10 +26,8 @@ interface Match {
 }
 
 interface Player {
-  id: string
-  name: string
-  // Try different possible column names
-  player_id?: string
+  player_id: string
+  player_name?: string
 }
 
 export default function MatchManager() {
@@ -58,48 +56,26 @@ export default function MatchManager() {
 
       console.log('Matches fetched:', matchesData?.length)
 
-      // Try to fetch players - handle different possible table names and column names
-      let playersData: Player[] = []
-      let playersError = null
+      // Fetch players from the players table (only player_id and player_name)
+      const { data: playersData, error: playersError } = await supabase
+        .from('players')
+        .select('player_id, player_name')
 
-      // Try different table names and column combinations
-      const playerQueries = [
-        supabase.from('players').select('id, name'),
-        supabase.from('players').select('player_id, name'),
-        supabase.from('player').select('id, name'),
-        supabase.from('player').select('player_id, name'),
-        supabase.from('users').select('id, name'),
-        supabase.from('users').select('user_id, name')
-      ]
-
-      for (const query of playerQueries) {
-        const { data, error } = await query
-        if (!error && data && data.length > 0) {
-          playersData = data.map((p: any) => ({
-            id: p.id || p.player_id || p.user_id,
-            name: p.name,
-            player_id: p.player_id
-          }))
-          console.log('Players found in table:', playersData.length)
-          break
-        }
-        if (error) {
-          playersError = error
-        }
-      }
-
-      // If no players found, create empty array and continue
-      if (playersData.length === 0) {
-        console.warn('No players table found or no players in database')
-        playersData = []
+      if (playersError) {
+        console.error('Players error:', playersError)
+        // Continue without players if there's an error
+        console.warn('Could not load players, continuing with matches only')
+      } else {
+        console.log('Players fetched:', playersData?.length)
+        setPlayers(playersData || [])
       }
 
       setMatches(matchesData || [])
-      setPlayers(playersData)
 
-    } catch (error: any) {
-      console.error('Error in fetchData:', error)
-      setError(error.message || 'Error loading data')
+    } catch (err: unknown) {
+      console.error('Error in fetchData:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Error loading data'
+      setError(errorMessage)
     } finally {
       setLoading(false)
     }
@@ -109,17 +85,15 @@ export default function MatchManager() {
     fetchData()
   }, [])
 
-  // Get player name by ID - handle different ID formats
+  // Get player name by ID
   const getPlayerName = (playerId: string | undefined): string => {
     if (!playerId) return 'N/A'
     
-    // Try to find player by different ID fields
-    const player = players.find(p => 
-      p.id === playerId || 
-      p.player_id === playerId
-    )
+    const player = players.find(p => p.player_id === playerId)
     
-    return player ? player.name : `Player (${playerId.slice(0, 8)}...)`
+    if (!player) return `Player (${playerId.slice(0, 8)}...)`
+    
+    return player.player_name || `Player (${playerId.slice(0, 8)}...)`
   }
 
   // Get tournament type
@@ -145,16 +119,17 @@ export default function MatchManager() {
 
       setMatches(matches.filter((match: Match) => match.match_id !== matchId))
       alert('Match deleted successfully')
-    } catch (error: any) {
-      console.error('Error deleting match:', error)
-      alert(`Error deleting match: ${error.message}`)
+    } catch (err: unknown) {
+      console.error('Error deleting match:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Error deleting match'
+      alert(`Error deleting match: ${errorMessage}`)
     } finally {
       setDeleting(null)
     }
   }
 
   // Retry loading data
-  const handleRetry = () => {
+  const handleRetry = (): void => {
     setLoading(true)
     fetchData()
   }
@@ -180,14 +155,6 @@ export default function MatchManager() {
             >
               Try Again
             </button>
-            <div className="text-sm text-red-500">
-              <p>Possible issues:</p>
-              <ul className="list-disc list-inside mt-2">
-                <li>Database tables might not exist</li>
-                <li>Check if Supabase connection is configured</li>
-                <li>Verify table names and columns match the schema</li>
-              </ul>
-            </div>
           </div>
         </div>
       </div>
@@ -237,7 +204,7 @@ export default function MatchManager() {
                     Rounds
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Winner
+                    Winner / Loser
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Finishes
@@ -255,14 +222,9 @@ export default function MatchManager() {
                         match.tournament_id ? 'text-purple-600' : 'text-green-600'
                       }`}>
                         {getTournamentType(match.tournament_id)}
-                        {match.tournament_id && (
-                          <div className="text-xs text-gray-500">
-                            ID: {match.tournament_id.slice(0, 8)}...
-                          </div>
-                        )}
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4">
                       <div className="text-sm text-gray-900">
                         <span className="font-medium">Player 1:</span> {getPlayerName(match.player1_id)}
                       </div>
@@ -275,15 +237,13 @@ export default function MatchManager() {
                         {match.rounds} rounds
                       </span>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
+                    <td className="px-6 py-4">
                       <div className="text-sm font-medium text-green-600">
-                        {match.winner_id ? getPlayerName(match.winner_id) : 'No winner'}
+                        <span className="font-medium">Winner:</span> {getPlayerName(match.winner_id)}
                       </div>
-                      {match.loser_id && (
-                        <div className="text-sm text-red-600">
-                          Loser: {getPlayerName(match.loser_id)}
-                        </div>
-                      )}
+                      <div className="text-sm text-red-600">
+                        <span className="font-medium">Loser:</span> {getPlayerName(match.loser_id)}
+                      </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
@@ -291,6 +251,12 @@ export default function MatchManager() {
                       </div>
                       <div className="text-sm text-gray-900">
                         <span className="font-medium">Over:</span> {match.over_finishes || 0}/{match.over_finishes2 || 0}
+                      </div>
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Burst:</span> {match.burst_finishes || 0}/{match.burst_finishes2 || 0}
+                      </div>
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Xtreme:</span> {match.xtreme_finishes || 0}/{match.xtreme_finishes2 || 0}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
