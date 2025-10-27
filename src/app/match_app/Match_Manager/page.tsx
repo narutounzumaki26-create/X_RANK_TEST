@@ -1,9 +1,8 @@
 // components/MatchManager.tsx
 'use client'
 
-import { useRouter } from 'next/navigation'
-import { useEffect, useState, useCallback } from 'react'
-import { supabase } from '@/lib/supabaseClient'
+import { useState, useEffect } from 'react'
+import { supabase } from '@/lib/supabase'
 
 // Types defined directly in the component file
 interface Match {
@@ -26,32 +25,76 @@ interface Match {
   xtreme_finishes2?: number
 }
 
+interface Player {
+  player_id: string
+  name: string
+}
+
+interface Tournament {
+  tournament_id: string
+  name: string
+}
+
 export default function MatchManager() {
   const [matches, setMatches] = useState<Match[]>([])
+  const [players, setPlayers] = useState<Player[]>([])
+  const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [deleting, setDeleting] = useState<string | null>(null)
 
-  // Fetch all matches
-  const fetchMatches = async (): Promise<void> => {
+  // Fetch all data
+  const fetchData = async (): Promise<void> => {
     try {
-      const { data, error } = await supabase
+      // Fetch matches
+      const { data: matchesData, error: matchesError } = await supabase
         .from('matches')
         .select('*')
         .order('rounds', { ascending: false })
 
-      if (error) throw error
-      setMatches(data || [])
+      if (matchesError) throw matchesError
+
+      // Fetch players
+      const { data: playersData, error: playersError } = await supabase
+        .from('players')
+        .select('player_id, name')
+
+      if (playersError) throw playersError
+
+      // Fetch tournaments
+      const { data: tournamentsData, error: tournamentsError } = await supabase
+        .from('tournaments')
+        .select('tournament_id, name')
+
+      if (tournamentsError) throw tournamentsError
+
+      setMatches(matchesData || [])
+      setPlayers(playersData || [])
+      setTournaments(tournamentsData || [])
     } catch (error) {
-      console.error('Error fetching matches:', error)
-      alert('Error loading matches')
+      console.error('Error fetching data:', error)
+      alert('Error loading data')
     } finally {
       setLoading(false)
     }
   }
 
   useEffect(() => {
-    fetchMatches()
+    fetchData()
   }, [])
+
+  // Get player name by ID
+  const getPlayerName = (playerId: string | undefined): string => {
+    if (!playerId) return 'N/A'
+    const player = players.find(p => p.player_id === playerId)
+    return player ? player.name : `Unknown (${playerId.slice(0, 8)}...)`
+  }
+
+  // Get tournament name by ID
+  const getTournamentType = (tournamentId: string | undefined): string => {
+    if (!tournamentId) return 'Match Officiel'
+    const tournament = tournaments.find(t => t.tournament_id === tournamentId)
+    return tournament ? tournament.name : `Tournament (${tournamentId.slice(0, 8)}...)`
+  }
 
   // Delete match function
   const handleDeleteMatch = async (matchId: string): Promise<void> => {
@@ -108,7 +151,7 @@ export default function MatchManager() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Match ID
+                    Match Type
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     Players
@@ -131,16 +174,18 @@ export default function MatchManager() {
                 {matches.map((match: Match) => (
                   <tr key={match.match_id} className="hover:bg-gray-50">
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900">
-                        {match.match_id.slice(0, 8)}...
+                      <div className={`text-sm font-medium ${
+                        match.tournament_id ? 'text-purple-600' : 'text-green-600'
+                      }`}>
+                        {getTournamentType(match.tournament_id)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        Player 1: {match.player1_id ? match.player1_id.slice(0, 8) + '...' : 'N/A'}
+                        <span className="font-medium">Player 1:</span> {getPlayerName(match.player1_id)}
                       </div>
                       <div className="text-sm text-gray-900">
-                        Player 2: {match.player2_id ? match.player2_id.slice(0, 8) + '...' : 'N/A'}
+                        <span className="font-medium">Player 2:</span> {getPlayerName(match.player2_id)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -149,16 +194,27 @@ export default function MatchManager() {
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm text-gray-900">
-                        {match.winner_id ? match.winner_id.slice(0, 8) + '...' : 'No winner'}
+                      <div className="text-sm font-medium text-green-600">
+                        {match.winner_id ? getPlayerName(match.winner_id) : 'No winner'}
                       </div>
+                      {match.loser_id && (
+                        <div className="text-sm text-red-600">
+                          Loser: {getPlayerName(match.loser_id)}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
-                        Spin: {match.spin_finishes || 0}/{match.spin_finishes2 || 0}
+                        <span className="font-medium">Spin:</span> {match.spin_finishes || 0}/{match.spin_finishes2 || 0}
                       </div>
                       <div className="text-sm text-gray-900">
-                        Over: {match.over_finishes || 0}/{match.over_finishes2 || 0}
+                        <span className="font-medium">Over:</span> {match.over_finishes || 0}/{match.over_finishes2 || 0}
+                      </div>
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Burst:</span> {match.burst_finishes || 0}/{match.burst_finishes2 || 0}
+                      </div>
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Xtreme:</span> {match.xtreme_finishes || 0}/{match.xtreme_finishes2 || 0}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
