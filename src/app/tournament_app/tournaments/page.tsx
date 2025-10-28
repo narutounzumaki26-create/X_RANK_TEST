@@ -2,7 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from '@/lib/supabase'
 
 interface Tournament {
   tournament_id: string
@@ -25,6 +25,7 @@ export default function TournamentManager() {
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [players, setPlayers] = useState<Player[]>([])
   const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null)
+  const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -40,8 +41,8 @@ export default function TournamentManager() {
     description: ''
   })
 
-  // Check if current user is admin
-  const isAdmin = currentUser && players.find(p => p.player_id === currentUser.id)?.Admin
+  // Check if current user is admin - FIXED VERSION
+  const isAdmin = currentPlayer?.Admin === true
 
   const fetchData = async (): Promise<void> => {
     try {
@@ -51,7 +52,23 @@ export default function TournamentManager() {
       const { data: { user } } = await supabase.auth.getUser()
       setCurrentUser(user)
 
-      // Fetch tournaments and players
+      if (user) {
+        // Fetch current player's admin status
+        const { data: playerData, error: playerError } = await supabase
+          .from('players')
+          .select('player_id, player_name, Admin')
+          .eq('player_id', user.id)
+          .single()
+
+        if (!playerError && playerData) {
+          setCurrentPlayer(playerData)
+          console.log('Current player admin status:', playerData.Admin)
+        } else {
+          console.log('Player not found or error:', playerError)
+        }
+      }
+
+      // Fetch tournaments and all players
       const [tournamentsRes, playersRes] = await Promise.all([
         supabase.from('tournaments').select('*').order('date', { ascending: false }),
         supabase.from('players').select('player_id, player_name, Admin')
@@ -117,6 +134,7 @@ export default function TournamentManager() {
       }
 
       console.log('Submitting data:', submissionData)
+      console.log('User is admin:', isAdmin)
 
       if (editingTournament) {
         const { error } = await supabase
@@ -125,6 +143,7 @@ export default function TournamentManager() {
           .eq('tournament_id', editingTournament.tournament_id)
 
         if (error) {
+          console.error('Update error:', error)
           if (error.message.includes('row-level security') || error.message.includes('policy')) {
             throw new Error('Permission denied: Only administrators can update tournaments.')
           }
@@ -137,6 +156,7 @@ export default function TournamentManager() {
           .insert([submissionData])
 
         if (error) {
+          console.error('Insert error:', error)
           if (error.message.includes('row-level security') || error.message.includes('policy')) {
             throw new Error('Permission denied: Only administrators can create tournaments.')
           }
@@ -156,7 +176,7 @@ export default function TournamentManager() {
 
   const handleEdit = (tournament: Tournament): void => {
     if (!isAdmin) {
-      alert('Only administrators can edit tournaments.')
+      alert('Only administrators can edit tournaments. Your admin status: ' + isAdmin)
       return
     }
     setEditingTournament(tournament)
@@ -173,7 +193,7 @@ export default function TournamentManager() {
 
   const handleDelete = async (tournamentId: string): Promise<void> => {
     if (!isAdmin) {
-      alert('Only administrators can delete tournaments.')
+      alert('Only administrators can delete tournaments. Your admin status: ' + isAdmin)
       return
     }
 
@@ -217,10 +237,21 @@ export default function TournamentManager() {
 
   const showCreateForm = (): void => {
     if (!isAdmin) {
-      alert('Only administrators can create tournaments.')
+      alert('Only administrators can create tournaments. Your admin status: ' + isAdmin)
       return
     }
     setShowForm(true)
+  }
+
+  // Debug function to check user status
+  const debugUserStatus = () => {
+    console.log('Debug info:', {
+      currentUser,
+      currentPlayer,
+      isAdmin,
+      allPlayers: players
+    })
+    alert(`Debug Info:\nUser: ${currentUser?.id}\nPlayer: ${currentPlayer?.player_id}\nAdmin: ${isAdmin}`)
   }
 
   if (loading) {
@@ -235,7 +266,7 @@ export default function TournamentManager() {
     return (
       <div className="p-6 max-w-6xl mx-auto">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h2 className="text-red-800 text-xl font-semibold mb-2">Permission Error</h2>
+          <h2 className="text-red-800 text-xl font-semibold mb-2">Error</h2>
           <p className="text-red-600 mb-4">{error}</p>
           <div className="space-y-3">
             <button
@@ -244,15 +275,13 @@ export default function TournamentManager() {
             >
               Try Again
             </button>
+            <button
+              onClick={debugUserStatus}
+              className="bg-gray-600 hover:bg-gray-700 text-white px-4 py-2 rounded-md ml-3"
+            >
+              Debug User Status
+            </button>
           </div>
-          {error.includes('administrator') && (
-            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
-              <p className="text-yellow-800 text-sm">
-                <strong>Admin Required:</strong> You need administrator privileges to perform this action.
-                Please contact a system administrator.
-              </p>
-            </div>
-          )}
         </div>
       </div>
     )
@@ -284,6 +313,13 @@ export default function TournamentManager() {
             className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm"
           >
             Refresh
+          </button>
+          <button
+            onClick={debugUserStatus}
+            className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-2 rounded text-sm"
+            title="Debug user status"
+          >
+            Debug
           </button>
         </div>
       </div>
@@ -414,7 +450,15 @@ export default function TournamentManager() {
               Create First Tournament
             </button>
           ) : (
-            <p className="text-orange-600">Only administrators can create tournaments</p>
+            <div>
+              <p className="text-orange-600 mb-2">Only administrators can create tournaments</p>
+              <button
+                onClick={debugUserStatus}
+                className="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm"
+              >
+                Check Admin Status
+              </button>
+            </div>
           )}
         </div>
       ) : (
