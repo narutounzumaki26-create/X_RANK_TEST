@@ -21,9 +21,23 @@ interface Player {
   player_name?: string
 }
 
+interface TournamentParticipant {
+  tournament_id: string
+  player_id: string
+  is_validated?: boolean
+}
+
+interface TournamentDeck {
+  tournament_id: string
+  player_id: string
+  deck_id: string
+}
+
 export default function TournamentManager() {
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [players, setPlayers] = useState<Player[]>([])
+  const [participants, setParticipants] = useState<TournamentParticipant[]>([])
+  const [decks, setDecks] = useState<TournamentDeck[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -44,15 +58,19 @@ export default function TournamentManager() {
     try {
       setError(null)
 
-      const [tournamentsRes, playersRes] = await Promise.all([
+      const [tournamentsRes, playersRes, participantsRes, decksRes] = await Promise.all([
         supabase.from('tournaments').select('*').order('date', { ascending: false }),
-        supabase.from('players').select('player_id, player_name')
+        supabase.from('players').select('player_id, player_name'),
+        supabase.from('tournament_participants').select('tournament_id, player_id'),
+        supabase.from('tournament_decks').select('tournament_id, player_id, deck_id')
       ])
 
       if (tournamentsRes.error) throw tournamentsRes.error
 
       setTournaments(tournamentsRes.data || [])
       setPlayers(playersRes.data || [])
+      setParticipants(participantsRes.data || [])
+      setDecks(decksRes.data || [])
 
     } catch (err: unknown) {
       console.error('Error in fetchData:', err)
@@ -71,6 +89,14 @@ export default function TournamentManager() {
     if (!playerId) return 'No winner'
     const player = players.find(p => p.player_id === playerId)
     return player?.player_name || `Player (${playerId.slice(0, 8)}...)`
+  }
+
+  const getParticipantCount = (tournamentId: string): number => {
+    return participants.filter(p => p.tournament_id === tournamentId).length
+  }
+
+  const getDeckCount = (tournamentId: string): number => {
+    return decks.filter(d => d.tournament_id === tournamentId).length
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>): void => {
@@ -140,118 +166,34 @@ export default function TournamentManager() {
   }
 
   const handleDelete = async (tournamentId: string): Promise<void> => {
-    if (!confirm('Are you sure you want to delete this tournament? This will also delete all participants, decks, and matches related to this tournament.')) {
+    if (!confirm('Are you sure you want to delete this tournament? This will also delete all participants and decks.')) {
       return
     }
 
     setDeleting(tournamentId)
     
     try {
-      console.log('Starting deletion process for tournament:', tournamentId);
-
-      // First, delete related records from other tables
-      // Delete tournament participants
-      const { error: participantsError } = await supabase
-        .from('tournament_participants')
-        .delete()
-        .eq('tournament_id', tournamentId);
-
-      if (participantsError) {
-        console.error('Error deleting participants:', participantsError);
-        throw new Error(`Failed to delete participants: ${participantsError.message}`);
-      }
-
-      // Delete tournament decks
-      const { error: decksError } = await supabase
-        .from('tournament_decks')
-        .delete()
-        .eq('tournament_id', tournamentId);
-
-      if (decksError) {
-        console.error('Error deleting decks:', decksError);
-        throw new Error(`Failed to delete decks: ${decksError.message}`);
-      }
-
-      // Update matches to remove tournament reference (set tournament_id to null)
-      const { error: matchesError } = await supabase
-        .from('matches')
-        .update({ tournament_id: null })
-        .eq('tournament_id', tournamentId);
-
-      if (matchesError) {
-        console.error('Error updating matches:', matchesError);
-        throw new Error(`Failed to update matches: ${matchesError.message}`);
-      }
-
-      // Finally, delete the tournament
-      const { error: tournamentError } = await supabase
+      const { error } = await supabase
         .from('tournaments')
         .delete()
-        .eq('tournament_id', tournamentId);
+        .eq('tournament_id', tournamentId)
 
-      if (tournamentError) {
-        console.error('Error deleting tournament:', tournamentError);
-        throw new Error(`Failed to delete tournament: ${tournamentError.message}`);
-      }
+      if (error) throw error
 
-      console.log('Tournament deleted successfully');
-      setTournaments(prev => prev.filter(t => t.tournament_id !== tournamentId));
-      alert('Tournament deleted successfully');
-      
+      setTournaments(tournaments.filter(t => t.tournament_id !== tournamentId))
+      alert('Tournament deleted successfully')
     } catch (err: unknown) {
-      console.error('Error in delete process:', err);
-      const errorMessage = err instanceof Error ? err.message : 'Error deleting tournament';
-      
-      // More detailed error message
-      if (errorMessage.includes('foreign key constraint')) {
-        alert(`Cannot delete tournament: It has related records in other tables. Please contact an administrator to set up proper cascade deletion.`);
-      } else {
-        alert(`Delete failed: ${errorMessage}`);
-      }
+      console.error('Error deleting tournament:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Error deleting tournament'
+      alert(`Error: ${errorMessage}`)
     } finally {
-      setDeleting(null);
+      setDeleting(null)
     }
   }
 
   const handleRetry = (): void => {
     setLoading(true)
     fetchData()
-  }
-
-  // Quick fix: Add this SQL to your database to enable cascade deletion
-  const showSQLFix = () => {
-    const sql = `
--- Run this in your Supabase SQL editor to fix deletion issues:
-
--- 1. First, drop the existing foreign key constraints
-ALTER TABLE tournament_participants 
-DROP CONSTRAINT IF EXISTS tournament_participants_tournament_id_fkey;
-
-ALTER TABLE tournament_decks 
-DROP CONSTRAINT IF EXISTS tournament_decks_tournament_id_fkey;
-
-ALTER TABLE matches 
-DROP CONSTRAINT IF EXISTS matches_tournament_id_fkey;
-
--- 2. Recreate them with CASCADE DELETE
-ALTER TABLE tournament_participants 
-ADD CONSTRAINT tournament_participants_tournament_id_fkey 
-FOREIGN KEY (tournament_id) REFERENCES tournaments(tournament_id) 
-ON DELETE CASCADE;
-
-ALTER TABLE tournament_decks 
-ADD CONSTRAINT tournament_decks_tournament_id_fkey 
-FOREIGN KEY (tournament_id) REFERENCES tournaments(tournament_id) 
-ON DELETE CASCADE;
-
-ALTER TABLE matches 
-ADD CONSTRAINT matches_tournament_id_fkey 
-FOREIGN KEY (tournament_id) REFERENCES tournaments(tournament_id) 
-ON DELETE SET NULL;
-    `;
-    
-    console.log('SQL Fix:', sql);
-    alert('Check browser console for SQL fix. Copy and run it in Supabase SQL editor.');
   }
 
   if (loading) {
@@ -268,20 +210,12 @@ ON DELETE SET NULL;
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
           <h2 className="text-red-800 text-xl font-semibold mb-2">Error</h2>
           <p className="text-red-600 mb-4">{error}</p>
-          <div className="space-y-3">
-            <button
-              onClick={handleRetry}
-              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md"
-            >
-              Try Again
-            </button>
-            <button
-              onClick={showSQLFix}
-              className="bg-orange-600 hover:bg-orange-700 text-white px-4 py-2 rounded-md ml-3"
-            >
-              Show SQL Fix
-            </button>
-          </div>
+          <button
+            onClick={handleRetry}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md"
+          >
+            Try Again
+          </button>
         </div>
       </div>
     )
@@ -307,23 +241,241 @@ ON DELETE SET NULL;
           >
             Refresh
           </button>
-          <button
-            onClick={showSQLFix}
-            className="bg-orange-600 hover:bg-orange-700 text-white px-3 py-2 rounded text-sm"
-          >
-            Fix Deletion
-          </button>
         </div>
       </div>
 
-      {/* Rest of the component remains the same */}
       {showForm && (
         <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-          {/* Form content same as before */}
+          <h2 className="text-xl font-semibold mb-4">
+            {editingTournament ? 'Edit Tournament' : 'Create New Tournament'}
+          </h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Tournament Name *
+                </label>
+                <input
+                  type="text"
+                  name="name"
+                  value={formData.name || ''}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Location
+                </label>
+                <input
+                  type="text"
+                  name="location"
+                  value={formData.location || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Date *
+                </label>
+                <input
+                  type="date"
+                  name="date"
+                  value={formData.date || ''}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Status *
+                </label>
+                <select
+                  name="status"
+                  value={formData.status || 'planned'}
+                  onChange={handleInputChange}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="planned">Planned</option>
+                  <option value="ongoing">Ongoing</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Max Combos *
+                </label>
+                <input
+                  type="number"
+                  name="max_combos"
+                  value={formData.max_combos || 3}
+                  onChange={handleInputChange}
+                  min="1"
+                  max="10"
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Winner
+                </label>
+                <select
+                  name="winner_id"
+                  value={formData.winner_id || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">No winner</option>
+                  {players.map(player => (
+                    <option key={player.player_id} value={player.player_id}>
+                      {player.player_name || `Player (${player.player_id.slice(0, 8)}...)`}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Description
+              </label>
+              <textarea
+                name="description"
+                value={formData.description || ''}
+                onChange={handleInputChange}
+                rows={3}
+                className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+              />
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                type="submit"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+              >
+                {editingTournament ? 'Update Tournament' : 'Create Tournament'}
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
         </div>
       )}
 
-      {/* Table content same as before */}
+      {tournaments.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-lg shadow">
+          <p className="text-gray-500 text-lg mb-4">No tournaments found</p>
+          <button
+            onClick={() => setShowForm(true)}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+          >
+            Create First Tournament
+          </button>
+        </div>
+      ) : (
+        <div className="bg-white shadow-md rounded-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    TOURNAMENT
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    DETAILS
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    PARTICIPANTS
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    WINNER
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    ACTIONS
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {tournaments.map((tournament) => (
+                  <tr key={tournament.tournament_id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">
+                        {tournament.name}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {tournament.location || 'No location specified'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Date:</span> {new Date(tournament.date).toLocaleDateString()}
+                      </div>
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Status:</span> 
+                        <span className={`ml-1 px-2 py-1 text-xs rounded-full ${
+                          tournament.status === 'completed' ? 'bg-green-100 text-green-800' :
+                          tournament.status === 'ongoing' ? 'bg-blue-100 text-blue-800' :
+                          tournament.status === 'cancelled' ? 'bg-red-100 text-red-800' :
+                          'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {tournament.status}
+                        </span>
+                      </div>
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Max Combos:</span> {tournament.max_combos}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Participants:</span> {getParticipantCount(tournament.tournament_id)}
+                      </div>
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Decks:</span> {getDeckCount(tournament.tournament_id)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-green-600">
+                        {getPlayerName(tournament.winner_id)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                      <button
+                        onClick={() => handleEdit(tournament)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(tournament.tournament_id)}
+                        disabled={deleting === tournament.tournament_id}
+                        className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white px-3 py-1 rounded text-sm"
+                      >
+                        {deleting === tournament.tournament_id ? 'Deleting...' : 'Delete'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
