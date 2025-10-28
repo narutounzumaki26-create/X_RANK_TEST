@@ -2,7 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
+import { supabase } from "@/lib/supabaseClient";
 
 // Types defined directly in the component file
 interface Tournament {
