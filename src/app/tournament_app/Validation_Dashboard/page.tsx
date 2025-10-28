@@ -77,18 +77,62 @@ export default function ParticipantValidationDashboard() {
     try {
       setLoading(true);
 
-      const { data: participantsData, error } = await supabase
+      // Get participants
+      const { data: participantsData, error: participantsError } = await supabase
         .from("tournament_participants")
-        .select(`
-          *,
-          player:player_id(player_name, user_id),
-          tournament:tournament_id(name, date, location)
-        `)
+        .select("*")
         .order("tournament_id")
         .order("player_id");
 
-      if (error) throw error;
-      setParticipants(participantsData || []);
+      if (participantsError) throw participantsError;
+
+      if (!participantsData || participantsData.length === 0) {
+        setParticipants([]);
+        return;
+      }
+
+      // Get unique player and tournament IDs
+      const playerIds = [...new Set(participantsData.map(p => p.player_id))];
+      const tournamentIds = [...new Set(participantsData.map(p => p.tournament_id))];
+
+      // Fetch players data
+      const { data: playersData, error: playersError } = await supabase
+        .from("players")
+        .select("player_id, player_name, user_id")
+        .in("player_id", playerIds);
+
+      if (playersError) throw playersError;
+
+      // Fetch tournaments data
+      const { data: tournamentsData, error: tournamentsError } = await supabase
+        .from("tournaments")
+        .select("tournament_id, name, date, location")
+        .in("tournament_id", tournamentIds);
+
+      if (tournamentsError) throw tournamentsError;
+
+      // Combine the data
+      const combinedData: TournamentParticipant[] = participantsData.map(participant => {
+        const player = playersData?.find(p => p.player_id === participant.player_id);
+        const tournament = tournamentsData?.find(t => t.tournament_id === participant.tournament_id);
+
+        return {
+          player_id: participant.player_id,
+          tournament_id: participant.tournament_id,
+          is_validated: participant.is_validated,
+          player: player ? {
+            player_name: player.player_name,
+            user_id: player.user_id
+          } : undefined,
+          tournament: tournament ? {
+            name: tournament.name,
+            date: tournament.date,
+            location: tournament.location
+          } : undefined
+        };
+      });
+
+      setParticipants(combinedData);
     } catch (error) {
       console.error("Error fetching participants:", error);
       alert("Erreur lors du chargement des participants");
@@ -341,7 +385,7 @@ export default function ParticipantValidationDashboard() {
                     {/* Player */}
                     <div className="col-span-3">
                       <div className="font-semibold text-white">
-                        {participant.player?.player_name}
+                        {participant.player?.player_name || 'Joueur inconnu'}
                       </div>
                       <div className="text-sm text-gray-400">
                         ID: {participant.player_id.substring(0, 8)}...
@@ -351,7 +395,7 @@ export default function ParticipantValidationDashboard() {
                     {/* Tournament */}
                     <div className="col-span-3">
                       <div className="font-semibold text-white">
-                        {participant.tournament?.name}
+                        {participant.tournament?.name || 'Tournoi inconnu'}
                       </div>
                       <div className="text-sm text-gray-400">
                         ID: {participant.tournament_id.substring(0, 8)}...
