@@ -2,15 +2,13 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from '@/lib/supabase'
 
-// Types defined directly in the component file
 interface Tournament {
   tournament_id: string
   name: string
   location?: string
   date: string
-  winner_id?: string
   status: string
   max_combos: number
   created_by?: string
@@ -20,88 +18,54 @@ interface Tournament {
 interface Player {
   player_id: string
   player_name?: string
-}
-
-interface TournamentParticipant {
-  tournament_id: string
-  player_id: string
-  is_validated?: boolean
-  validated_at?: string
-  tournament_deck?: string
-  inscription_id?: string
-  placement?: number
-}
-
-interface TournamentDeck {
-  tournament_id: string
-  player_id: string
-  combo_id_1?: string
-  combo_id_2?: string
-  combo_id_3?: string
-  deck_id: string
-  Date_Creation?: string
+  Admin?: boolean
 }
 
 export default function TournamentManager() {
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [players, setPlayers] = useState<Player[]>([])
-  const [participants, setParticipants] = useState<TournamentParticipant[]>([])
-  const [decks, setDecks] = useState<TournamentDeck[]>([])
+  const [currentUser, setCurrentUser] = useState<any>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null)
   const [showForm, setShowForm] = useState<boolean>(false)
 
-  // Form state
   const [formData, setFormData] = useState<Partial<Tournament>>({
     name: '',
     location: '',
     date: new Date().toISOString().split('T')[0],
-    winner_id: '',
-    status: 'upcoming',
+    status: 'planned',
     max_combos: 3,
     description: ''
   })
 
-  // Fetch all data
+  // Check if current user is admin
+  const isAdmin = currentUser && players.find(p => p.player_id === currentUser.id)?.Admin
+
   const fetchData = async (): Promise<void> => {
     try {
       setError(null)
 
-      // Fetch tournaments
-      const { data: tournamentsData, error: tournamentsError } = await supabase
-        .from('tournaments')
-        .select('*')
-        .order('date', { ascending: false })
+      // Get current user
+      const { data: { user } } = await supabase.auth.getUser()
+      setCurrentUser(user)
 
-      if (tournamentsError) throw tournamentsError
+      // Fetch tournaments and players
+      const [tournamentsRes, playersRes] = await Promise.all([
+        supabase.from('tournaments').select('*').order('date', { ascending: false }),
+        supabase.from('players').select('player_id, player_name, Admin')
+      ])
 
-      // Fetch players
-      const { data: playersData, error: playersError } = await supabase
-        .from('players')
-        .select('player_id, player_name')
+      if (tournamentsRes.error) {
+        if (tournamentsRes.error.message.includes('row-level security')) {
+          throw new Error('RLS Policy Error: Cannot access tournaments. Check database permissions.')
+        }
+        throw tournamentsRes.error
+      }
 
-      if (playersError) console.warn('Could not load players')
-
-      // Fetch participants
-      const { data: participantsData, error: participantsError } = await supabase
-        .from('tournament_participants')
-        .select('*')
-
-      if (participantsError) console.warn('Could not load participants')
-
-      // Fetch decks
-      const { data: decksData, error: decksError } = await supabase
-        .from('tournament_decks')
-        .select('*')
-
-      if (decksError) console.warn('Could not load decks')
-
-      setTournaments(tournamentsData || [])
-      setPlayers(playersData || [])
-      setParticipants(participantsData || [])
-      setDecks(decksData || [])
+      setTournaments(tournamentsRes.data || [])
+      setPlayers(playersRes.data || [])
 
     } catch (err: unknown) {
       console.error('Error in fetchData:', err)
@@ -116,40 +80,20 @@ export default function TournamentManager() {
     fetchData()
   }, [])
 
-  // Get player name by ID
-  const getPlayerName = (playerId: string | undefined): string => {
-    if (!playerId) return 'N/A'
-    const player = players.find(p => p.player_id === playerId)
-    return player?.player_name || `Player (${playerId.slice(0, 8)}...)`
-  }
-
-  // Get participant count for a tournament
-  const getParticipantCount = (tournamentId: string): number => {
-    return participants.filter(p => p.tournament_id === tournamentId).length
-  }
-
-  // Get decks count for a tournament
-  const getDeckCount = (tournamentId: string): number => {
-    return decks.filter(d => d.tournament_id === tournamentId).length
-  }
-
-  // Handle form input changes
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>): void => {
     const { name, value } = e.target
     setFormData(prev => ({
       ...prev,
-      [name]: name === 'max_combos' ? parseInt(value) : value
+      [name]: name === 'max_combos' ? parseInt(value) || 3 : value
     }))
   }
 
-  // Reset form
   const resetForm = (): void => {
     setFormData({
       name: '',
       location: '',
       date: new Date().toISOString().split('T')[0],
-      winner_id: '',
-      status: 'upcoming',
+      status: 'planned',
       max_combos: 3,
       description: ''
     })
@@ -157,27 +101,47 @@ export default function TournamentManager() {
     setShowForm(false)
   }
 
-  // Create or update tournament
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
     
     try {
+      const submissionData: any = { ...formData }
+      
+      // Clean up empty strings for optional fields
+      if (submissionData.location === '') {
+        submissionData.location = null
+      }
+      
+      if (submissionData.description === '') {
+        submissionData.description = null
+      }
+
+      console.log('Submitting data:', submissionData)
+
       if (editingTournament) {
-        // Update tournament
         const { error } = await supabase
           .from('tournaments')
-          .update(formData)
+          .update(submissionData)
           .eq('tournament_id', editingTournament.tournament_id)
 
-        if (error) throw error
+        if (error) {
+          if (error.message.includes('row-level security') || error.message.includes('policy')) {
+            throw new Error('Permission denied: Only administrators can update tournaments.')
+          }
+          throw error
+        }
         alert('Tournament updated successfully')
       } else {
-        // Create new tournament
         const { error } = await supabase
           .from('tournaments')
-          .insert([formData])
+          .insert([submissionData])
 
-        if (error) throw error
+        if (error) {
+          if (error.message.includes('row-level security') || error.message.includes('policy')) {
+            throw new Error('Permission denied: Only administrators can create tournaments.')
+          }
+          throw error
+        }
         alert('Tournament created successfully')
       }
 
@@ -190,14 +154,16 @@ export default function TournamentManager() {
     }
   }
 
-  // Edit tournament
   const handleEdit = (tournament: Tournament): void => {
+    if (!isAdmin) {
+      alert('Only administrators can edit tournaments.')
+      return
+    }
     setEditingTournament(tournament)
     setFormData({
       name: tournament.name,
       location: tournament.location || '',
       date: tournament.date,
-      winner_id: tournament.winner_id || '',
       status: tournament.status,
       max_combos: tournament.max_combos,
       description: tournament.description || ''
@@ -205,9 +171,13 @@ export default function TournamentManager() {
     setShowForm(true)
   }
 
-  // Delete tournament
   const handleDelete = async (tournamentId: string): Promise<void> => {
-    if (!confirm('Are you sure you want to delete this tournament? This will also delete all participants and decks.')) {
+    if (!isAdmin) {
+      alert('Only administrators can delete tournaments.')
+      return
+    }
+
+    if (!confirm('Are you sure you want to delete this tournament?')) {
       return
     }
 
@@ -219,23 +189,38 @@ export default function TournamentManager() {
         .delete()
         .eq('tournament_id', tournamentId)
 
-      if (error) throw error
+      if (error) {
+        console.error('Delete error:', error)
+        
+        if (error.message.includes('row-level security') || error.message.includes('policy')) {
+          throw new Error('Permission denied: Only administrators can delete tournaments.')
+        }
+        throw error
+      }
 
-      setTournaments(tournaments.filter(t => t.tournament_id !== tournamentId))
+      setTournaments(prev => prev.filter(t => t.tournament_id !== tournamentId))
       alert('Tournament deleted successfully')
+      
     } catch (err: unknown) {
       console.error('Error deleting tournament:', err)
       const errorMessage = err instanceof Error ? err.message : 'Error deleting tournament'
-      alert(`Error: ${errorMessage}`)
+      alert(`Delete failed: ${errorMessage}`)
     } finally {
       setDeleting(null)
     }
   }
 
-  // Retry loading data
   const handleRetry = (): void => {
     setLoading(true)
     fetchData()
+  }
+
+  const showCreateForm = (): void => {
+    if (!isAdmin) {
+      alert('Only administrators can create tournaments.')
+      return
+    }
+    setShowForm(true)
   }
 
   if (loading) {
@@ -250,14 +235,24 @@ export default function TournamentManager() {
     return (
       <div className="p-6 max-w-6xl mx-auto">
         <div className="bg-red-50 border border-red-200 rounded-lg p-6">
-          <h2 className="text-red-800 text-xl font-semibold mb-2">Error</h2>
+          <h2 className="text-red-800 text-xl font-semibold mb-2">Permission Error</h2>
           <p className="text-red-600 mb-4">{error}</p>
-          <button
-            onClick={handleRetry}
-            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md"
-          >
-            Try Again
-          </button>
+          <div className="space-y-3">
+            <button
+              onClick={handleRetry}
+              className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md"
+            >
+              Try Again
+            </button>
+          </div>
+          {error.includes('administrator') && (
+            <div className="mt-4 p-3 bg-yellow-50 border border-yellow-200 rounded">
+              <p className="text-yellow-800 text-sm">
+                <strong>Admin Required:</strong> You need administrator privileges to perform this action.
+                Please contact a system administrator.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     )
@@ -269,14 +264,21 @@ export default function TournamentManager() {
         <h1 className="text-3xl font-bold text-gray-900">Tournament Manager</h1>
         <div className="flex items-center space-x-4">
           <div className="text-sm text-gray-500">
-            {tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''} found
+            {tournaments.length} tournament{tournaments.length !== 1 ? 's' : ''}
+            {isAdmin ? (
+              <span className="ml-2 text-green-600 font-semibold">(Administrator)</span>
+            ) : (
+              <span className="ml-2 text-orange-600">(View Only)</span>
+            )}
           </div>
-          <button
-            onClick={() => setShowForm(true)}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
-          >
-            Create Tournament
-          </button>
+          {isAdmin && (
+            <button
+              onClick={showCreateForm}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
+            >
+              Create Tournament
+            </button>
+          )}
           <button
             onClick={handleRetry}
             className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm"
@@ -286,8 +288,7 @@ export default function TournamentManager() {
         </div>
       </div>
 
-      {/* Tournament Form */}
-      {showForm && (
+      {showForm && isAdmin && (
         <div className="bg-white p-6 rounded-lg shadow-md mb-6">
           <h2 className="text-xl font-semibold mb-4">
             {editingTournament ? 'Edit Tournament' : 'Create New Tournament'}
@@ -341,12 +342,12 @@ export default function TournamentManager() {
                 </label>
                 <select
                   name="status"
-                  value={formData.status || 'upcoming'}
+                  value={formData.status || 'planned'}
                   onChange={handleInputChange}
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
-                  <option value="upcoming">Upcoming</option>
+                  <option value="planned">Planned</option>
                   <option value="ongoing">Ongoing</option>
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
@@ -367,25 +368,6 @@ export default function TournamentManager() {
                   required
                   className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Winner
-                </label>
-                <select
-                  name="winner_id"
-                  value={formData.winner_id || ''}
-                  onChange={handleInputChange}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="">No winner</option>
-                  {players.map(player => (
-                    <option key={player.player_id} value={player.player_id}>
-                      {player.player_name || `Player (${player.player_id.slice(0, 8)}...)`}
-                    </option>
-                  ))}
-                </select>
               </div>
             </div>
 
@@ -421,16 +403,19 @@ export default function TournamentManager() {
         </div>
       )}
 
-      {/* Tournaments List */}
       {tournaments.length === 0 ? (
         <div className="text-center py-12 bg-white rounded-lg shadow">
           <p className="text-gray-500 text-lg mb-4">No tournaments found</p>
-          <button
-            onClick={() => setShowForm(true)}
-            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
-          >
-            Create First Tournament
-          </button>
+          {isAdmin ? (
+            <button
+              onClick={showCreateForm}
+              className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+            >
+              Create First Tournament
+            </button>
+          ) : (
+            <p className="text-orange-600">Only administrators can create tournaments</p>
+          )}
         </div>
       ) : (
         <div className="bg-white shadow-md rounded-lg overflow-hidden">
@@ -439,19 +424,13 @@ export default function TournamentManager() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Tournament
+                    TOURNAMENT
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Details
+                    DETAILS
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Participants
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Winner
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
-                    Actions
+                    ACTIONS
                   </th>
                 </tr>
               </thead>
@@ -463,7 +442,7 @@ export default function TournamentManager() {
                         {tournament.name}
                       </div>
                       <div className="text-sm text-gray-500">
-                        {tournament.location || 'No location'}
+                        {tournament.location || 'No location specified'}
                       </div>
                     </td>
                     <td className="px-6 py-4">
@@ -485,33 +464,26 @@ export default function TournamentManager() {
                         <span className="font-medium">Max Combos:</span> {tournament.max_combos}
                       </div>
                     </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">
-                        Participants: {getParticipantCount(tournament.tournament_id)}
-                      </div>
-                      <div className="text-sm text-gray-900">
-                        Decks: {getDeckCount(tournament.tournament_id)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-green-600">
-                        {tournament.winner_id ? getPlayerName(tournament.winner_id) : 'No winner'}
-                      </div>
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                      <button
-                        onClick={() => handleEdit(tournament)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(tournament.tournament_id)}
-                        disabled={deleting === tournament.tournament_id}
-                        className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white px-3 py-1 rounded text-sm"
-                      >
-                        {deleting === tournament.tournament_id ? 'Deleting...' : 'Delete'}
-                      </button>
+                      {isAdmin ? (
+                        <>
+                          <button
+                            onClick={() => handleEdit(tournament)}
+                            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => handleDelete(tournament.tournament_id)}
+                            disabled={deleting === tournament.tournament_id}
+                            className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white px-3 py-1 rounded text-sm"
+                          >
+                            {deleting === tournament.tournament_id ? 'Deleting...' : 'Delete'}
+                          </button>
+                        </>
+                      ) : (
+                        <span className="text-gray-500 text-sm">View Only</span>
+                      )}
                     </td>
                   </tr>
                 ))}
