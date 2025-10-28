@@ -19,6 +19,7 @@ interface Player {
   player_id: string
   player_name?: string
   Admin?: boolean
+  admin?: boolean // Add both cases for safety
 }
 
 export default function TournamentManager() {
@@ -41,44 +42,62 @@ export default function TournamentManager() {
     description: ''
   })
 
-  // Check if current user is admin - FIXED VERSION
-  const isAdmin = currentPlayer?.Admin === true
+  // Enhanced admin check - handles both case variations
+  const isAdmin = currentPlayer?.Admin === true || currentPlayer?.admin === true
 
   const fetchData = async (): Promise<void> => {
     try {
       setError(null)
 
       // Get current user
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user }, error: userError } = await supabase.auth.getUser()
+      
+      if (userError) {
+        console.error('Auth error:', userError)
+        throw userError
+      }
+      
       setCurrentUser(user)
+      console.log('Current user:', user?.id)
 
       if (user) {
-        // Fetch current player's admin status
+        // Fetch current player's data with better error handling
         const { data: playerData, error: playerError } = await supabase
           .from('players')
-          .select('player_id, player_name, Admin')
+          .select('player_id, player_name, Admin, admin')
           .eq('player_id', user.id)
           .single()
 
-        if (!playerError && playerData) {
+        console.log('Player fetch result:', { playerData, playerError })
+
+        if (playerError) {
+          console.error('Player fetch error:', playerError)
+          // Don't throw here, just continue without player data
+        } else if (playerData) {
           setCurrentPlayer(playerData)
-          console.log('Current player admin status:', playerData.Admin)
-        } else {
-          console.log('Player not found or error:', playerError)
+          console.log('Current player data:', playerData)
+          console.log('Admin status (capital A):', playerData.Admin)
+          console.log('Admin status (lowercase a):', playerData.admin)
+          console.log('Calculated isAdmin:', playerData.Admin === true || playerData.admin === true)
         }
       }
 
       // Fetch tournaments and all players
       const [tournamentsRes, playersRes] = await Promise.all([
         supabase.from('tournaments').select('*').order('date', { ascending: false }),
-        supabase.from('players').select('player_id, player_name, Admin')
+        supabase.from('players').select('player_id, player_name, Admin, admin')
       ])
 
       if (tournamentsRes.error) {
+        console.error('Tournaments fetch error:', tournamentsRes.error)
         if (tournamentsRes.error.message.includes('row-level security')) {
           throw new Error('RLS Policy Error: Cannot access tournaments. Check database permissions.')
         }
         throw tournamentsRes.error
+      }
+
+      if (playersRes.error) {
+        console.error('Players fetch error:', playersRes.error)
       }
 
       setTournaments(tournamentsRes.data || [])
@@ -121,6 +140,11 @@ export default function TournamentManager() {
   const handleSubmit = async (e: React.FormEvent): Promise<void> => {
     e.preventDefault()
     
+    if (!isAdmin) {
+      alert(`Permission denied. Admin access required. Your admin status: ${isAdmin}`)
+      return
+    }
+    
     try {
       const submissionData: Record<string, unknown> = { ...formData }
       
@@ -133,8 +157,8 @@ export default function TournamentManager() {
         submissionData.description = null
       }
 
-      console.log('Submitting data:', submissionData)
-      console.log('User is admin:', isAdmin)
+      console.log('Submitting data as admin:', submissionData)
+      console.log('Admin status confirmed:', isAdmin)
 
       if (editingTournament) {
         const { error } = await supabase
@@ -176,7 +200,7 @@ export default function TournamentManager() {
 
   const handleEdit = (tournament: Tournament): void => {
     if (!isAdmin) {
-      alert('Only administrators can edit tournaments. Your admin status: ' + isAdmin)
+      alert(`Only administrators can edit tournaments. Your admin status: ${isAdmin}`)
       return
     }
     setEditingTournament(tournament)
@@ -193,7 +217,7 @@ export default function TournamentManager() {
 
   const handleDelete = async (tournamentId: string): Promise<void> => {
     if (!isAdmin) {
-      alert('Only administrators can delete tournaments. Your admin status: ' + isAdmin)
+      alert(`Only administrators can delete tournaments. Your admin status: ${isAdmin}`)
       return
     }
 
@@ -237,21 +261,30 @@ export default function TournamentManager() {
 
   const showCreateForm = (): void => {
     if (!isAdmin) {
-      alert('Only administrators can create tournaments. Your admin status: ' + isAdmin)
+      alert(`Only administrators can create tournaments. Your admin status: ${isAdmin}`)
       return
     }
     setShowForm(true)
   }
 
-  // Debug function to check user status
+  // Enhanced debug function
   const debugUserStatus = () => {
-    console.log('Debug info:', {
-      currentUser,
-      currentPlayer,
-      isAdmin,
-      allPlayers: players
-    })
-    alert(`Debug Info:\nUser: ${currentUser?.id}\nPlayer: ${currentPlayer?.player_id}\nAdmin: ${isAdmin}`)
+    const debugInfo = {
+      currentUserId: currentUser?.id,
+      currentPlayer: currentPlayer,
+      isAdmin: isAdmin,
+      allPlayersCount: players.length,
+      adminPlayers: players.filter(p => p.Admin === true || p.admin === true)
+    }
+    console.log('Debug info:', debugInfo)
+    alert(`Debug Info:
+User: ${currentUser?.id}
+Player: ${currentPlayer?.player_id}
+Admin (capital A): ${currentPlayer?.Admin}
+Admin (lowercase a): ${currentPlayer?.admin}
+Calculated isAdmin: ${isAdmin}
+Total players: ${players.length}
+Admin players: ${debugInfo.adminPlayers.length}`)
   }
 
   if (loading) {
