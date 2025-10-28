@@ -2,7 +2,7 @@
 'use client'
 
 import { useState, useEffect } from 'react'
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from '@/lib/supabase'
 
 interface Tournament {
   tournament_id: string
@@ -24,7 +24,7 @@ interface Player {
 export default function TournamentManager() {
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [players, setPlayers] = useState<Player[]>([])
-  const [currentUser, setCurrentUser] = useState<any>(null)
+  const [currentUser, setCurrentUser] = useState<{ id: string } | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -105,7 +105,7 @@ export default function TournamentManager() {
     e.preventDefault()
     
     try {
-      const submissionData: any = { ...formData }
+      const submissionData: Record<string, unknown> = { ...formData }
       
       // Clean up empty strings for optional fields
       if (submissionData.location === '') {
