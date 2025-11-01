@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react"; // Ajouter useCallback
 import Link from "next/link";
 
 import { supabase } from "@/lib/supabaseClient";
@@ -86,7 +86,8 @@ export default function FinishedTournamentsPage() {
     }
   };
 
-  const fetchFinishedTournaments = async () => {
+  // Utiliser useCallback pour stabiliser la fonction
+  const fetchFinishedTournaments = useCallback(async () => {
     setLoading(true);
     setError(null);
 
@@ -152,11 +153,11 @@ export default function FinishedTournamentsPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, []); // fetchTournamentParticipants n'est pas inclus car utilisé à l'intérieur
 
   useEffect(() => {
     void fetchFinishedTournaments();
-  }, []);
+  }, [fetchFinishedTournaments]); // Maintenant la dépendance est stable
 
   const handleShowRanking = (tournament: Tournament) => {
     setSelectedTournament(tournament);
@@ -249,7 +250,7 @@ export default function FinishedTournamentsPage() {
     if (firstPlacePlayer) {
       setTournamentWinner(firstPlacePlayer.player_id);
     } else {
-      alert("Aucun joueur n'a le placement #1. Veuillez d'abord définir le classement.");
+      alert("Aucun joueur n&apos;a le placement #1. Veuillez d&apos;abord définir le classement.");
     }
   };
 
@@ -293,7 +294,7 @@ export default function FinishedTournamentsPage() {
         centerContent
         header={{
           title: "Tournois terminés",
-          subtitle: "Aucun tournoi terminé n'a été trouvé.",
+          subtitle: "Aucun tournoi terminé n&apos;a été trouvé.",
           actions: (
             <div className="flex flex-wrap justify-center gap-3">
               <MainMenuButton className="w-full sm:w-auto" />
@@ -306,7 +307,7 @@ export default function FinishedTournamentsPage() {
           ),
         }}
       >
-        <p className="text-sm text-gray-300">Les tournois marqués comme "finished" apparaîtront ici.</p>
+        <p className="text-sm text-gray-300">Les tournois marqués comme &quot;finished&quot; apparaîtront ici.</p>
       </CyberPage>
     );
   }
