@@ -18,7 +18,7 @@ async function calculateLeaderboard(region?: string, tournamentId?: string | nul
     .from('matches')
     .select(`
       match_id,
-      player_id,
+      player1_id,
       player2_id,
       winner_id,
       tournament_id,
@@ -31,8 +31,8 @@ async function calculateLeaderboard(region?: string, tournamentId?: string | nul
       over_finished2,
       burst_finished2,
       xtreme_finished2,
-      players!matches_player_id_fkey(player_id, player_name, player_region),
-      players!matches_player2_id_fkey(player_id, player_name, player_region)
+      player1:players!matches_player1_id_fkey(player_id, player_name, player_region),
+      player2:players!matches_player2_id_fkey(player_id, player_name, player_region)
     `)
 
   if (tournamentId !== undefined) {
@@ -49,8 +49,8 @@ async function calculateLeaderboard(region?: string, tournamentId?: string | nul
   const playerStats = new Map()
 
   matches?.forEach(match => {
-    const player1 = match.players_matches_player_id_fkey?.[0] || match.players_matches_player_id_fkey
-    const player2 = match.players_matches_player2_id_fkey?.[0] || match.players_matches_player2_id_fkey
+    const player1 = match.player1?.[0] || match.player1
+    const player2 = match.player2?.[0] || match.player2
 
     if (!player1 || !player2) return
 
