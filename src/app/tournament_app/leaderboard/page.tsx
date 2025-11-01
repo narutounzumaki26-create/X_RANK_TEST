@@ -1,6 +1,6 @@
-// src/app/leaderboard/page.tsx
+// src/app/tournament_app/leaderboard/page.tsx
 import { createSupabaseServerClient } from "@/lib/supabaseServer"
-import { Trophy, Globe, MapPin, Tournament } from "lucide-react"
+import { Trophy, Globe, MapPin, Award } from "lucide-react"
 import { CyberPage } from "@/components/layout/CyberPage"
 import { MainMenuButton } from "@/components/navigation/MainMenuButton"
 import {
@@ -10,8 +10,165 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card"
-import { calculateLeaderboard } from "@/lib/leaderboard-calculations"
 
+// Leaderboard calculation function
+async function calculateLeaderboard(options?: {
+  region?: string
+  tournamentId?: string | null
+}) {
+  const supabase = await createSupabaseServerClient()
+
+  // Get all matches with filters
+  let matchQuery = supabase
+    .from('matches')
+    .select(`
+      match_id,
+      player_id,
+      player2_id,
+      winner_id,
+      tournament_id,
+      spin_finishes,
+      over_finishes,
+      burst_finishes,
+      xtreme_finishes,
+      spin_finishes2,
+      over_finishes2,
+      burst_finishes2,
+      xtreme_finishes2,
+      players!matches_player_id_fkey(
+        player_id,
+        player_name,
+        player_region
+      ),
+      players!matches_player2_id_fkey(
+        player_id,
+        player_name,
+        player_region
+      ),
+      tournaments!left(name)
+    `)
+
+  // Apply filters
+  if (options?.tournamentId !== undefined) {
+    if (options.tournamentId === null) {
+      matchQuery = matchQuery.is('tournament_id', null)
+    } else {
+      matchQuery = matchQuery.eq('tournament_id', options.tournamentId)
+    }
+  }
+
+  const { data: matches, error } = await matchQuery
+
+  if (error) {
+    console.error('Error fetching matches:', error)
+    throw error
+  }
+
+  // Calculate player statistics
+  const playerStats = new Map<string, any>()
+
+  matches?.forEach(match => {
+    const player1 = match.players_matches_player_id_fkey
+    const player2 = match.players_matches_player2_id_fkey
+    
+    if (!player1 || !player2) return
+
+    // Apply regional filter if specified
+    if (options?.region) {
+      if (player1.player_region !== options.region && player2.player_region !== options.region) {
+        return
+      }
+    }
+
+    // Update player1 stats
+    updatePlayerStats(playerStats, player1, match, match.winner_id === player1.player_id)
+    
+    // Update player2 stats
+    updatePlayerStats(playerStats, player2, match, match.winner_id === player2.player_id)
+  })
+
+  // Convert to array and calculate win rate
+  const leaderboard = Array.from(playerStats.values()).map(entry => ({
+    ...entry,
+    win_rate: entry.total_matches > 0 ? (entry.wins / entry.total_matches) * 100 : 0
+  }))
+
+  // Sort by score (descending)
+  leaderboard.sort((a, b) => b.total_score - a.total_score)
+
+  return leaderboard
+}
+
+function updatePlayerStats(
+  stats: Map<string, any>,
+  player: any,
+  match: any,
+  isWinner: boolean
+) {
+  const existing = stats.get(player.player_id) || {
+    player_id: player.player_id,
+    player_name: player.player_name || 'Unknown',
+    player_region: player.player_region,
+    total_score: 0,
+    wins: 0,
+    total_matches: 0,
+    win_rate: 0
+  }
+
+  existing.total_matches++
+
+  if (isWinner) {
+    existing.wins++
+    // Award points for win
+    existing.total_score += calculateMatchPoints(match, true)
+  } else {
+    // Award points for participation/loss
+    existing.total_score += calculateMatchPoints(match, false)
+  }
+
+  stats.set(player.player_id, existing)
+}
+
+function calculateMatchPoints(match: any, isWinner: boolean): number {
+  let points = 0
+
+  if (isWinner) {
+    points += 100 // Base points for win
+    
+    // Bonus points for finish types
+    const finishes = match.spin_finishes || 0
+    const overFinishes = match.over_finishes || 0
+    const burstFinishes = match.burst_finishes || 0
+    const xtremeFinishes = match.xtreme_finishes || 0
+
+    points += finishes * 10
+    points += overFinishes * 15
+    points += burstFinishes * 20
+    points += xtremeFinishes * 25
+
+    // Bonus for tournament matches
+    if (match.tournament_id) {
+      points += 50
+    }
+  } else {
+    points += 25 // Participation points
+    
+    // Points for finishes even if lost
+    const finishes = match.spin_finishes2 || 0
+    const overFinishes = match.over_finishes2 || 0
+    const burstFinishes = match.burst_finishes2 || 0
+    const xtremeFinishes = match.xtreme_finishes2 || 0
+
+    points += finishes * 5
+    points += overFinishes * 8
+    points += burstFinishes * 10
+    points += xtremeFinishes * 15
+  }
+
+  return points
+}
+
+// Helper functions to get regions and tournaments
 async function getRegions() {
   const supabase = await createSupabaseServerClient()
   const { data } = await supabase
@@ -34,33 +191,21 @@ async function getTournaments() {
   return data || []
 }
 
-export default async function LeaderboardPage() {
-  const [globalLeaderboard, regionalLeaderboards, tournamentLeaderboards, officialMatchesLeaderboard, regions, tournaments] = await Promise.all([
-    calculateLeaderboard(), // Global leaderboard
-    Promise.all((await getRegions()).map(region => 
-      calculateLeaderboard({ region })
-    )),
-    Promise.all((await getTournaments()).map(tournament => 
-      calculateLeaderboard({ tournamentId: tournament.tournament_id })
-    )),
-    calculateLeaderboard({ tournamentId: null }), // Official matches
-    getRegions(),
-    getTournaments()
-  ])
-
-  const LeaderboardSection = ({ 
-    title, 
-    subtitle, 
-    icon: Icon,
-    data,
-    emptyMessage = "Aucune donnée disponible"
-  }: {
-    title: string
-    subtitle: string
-    icon: any
-    data: any[]
-    emptyMessage?: string
-  }) => (
+// Leaderboard Section Component
+function LeaderboardSection({ 
+  title, 
+  subtitle, 
+  icon: Icon,
+  data,
+  emptyMessage = "Aucune donnée disponible"
+}: {
+  title: string
+  subtitle: string
+  icon: any
+  data: any[]
+  emptyMessage?: string
+}) {
+  return (
     <Card className="border border-white/10 bg-black/70 shadow-[0_0_28px_rgba(0,255,255,0.25)]">
       <CardHeader className="pb-2 text-center">
         <CardTitle className="text-xl text-cyan-200 drop-shadow-[0_0_16px_rgba(0,255,255,0.45)] flex items-center justify-center gap-2">
@@ -115,6 +260,28 @@ export default async function LeaderboardPage() {
       </CardContent>
     </Card>
   )
+}
+
+export default async function LeaderboardPage() {
+  // Load all leaderboards in parallel
+  const [globalLeaderboard, regions, tournaments] = await Promise.all([
+    calculateLeaderboard(), // Global leaderboard
+    getRegions(),
+    getTournaments()
+  ])
+
+  // Load regional leaderboards
+  const regionalLeaderboards = await Promise.all(
+    regions.map(region => calculateLeaderboard({ region }))
+  )
+
+  // Load tournament leaderboards
+  const tournamentLeaderboards = await Promise.all(
+    tournaments.map(tournament => calculateLeaderboard({ tournamentId: tournament.tournament_id }))
+  )
+
+  // Load official matches leaderboard
+  const officialMatchesLeaderboard = await calculateLeaderboard({ tournamentId: null })
 
   return (
     <CyberPage
@@ -168,7 +335,7 @@ export default async function LeaderboardPage() {
       {/* Tournament Leaderboards */}
       <div>
         <h2 className="text-2xl font-bold text-cyan-300 mb-6 flex items-center gap-2">
-          <Tournament className="h-6 w-6" />
+          <Award className="h-6 w-6" />
           Classements Tournois
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
@@ -180,8 +347,8 @@ export default async function LeaderboardPage() {
               <LeaderboardSection
                 key={tournament.tournament_id}
                 title={tournament.name}
-                subtitle={`Tournois du ${new Date(tournament.date).toLocaleDateString('fr-FR')}`}
-                icon={Tournament}
+                subtitle={`Tournoi du ${new Date(tournament.date).toLocaleDateString('fr-FR')}`}
+                icon={Award}
                 data={leaderboard.slice(0, 5)}
                 emptyMessage={`Aucun match pour ${tournament.name}`}
               />
