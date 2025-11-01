@@ -96,6 +96,23 @@ export default function PlayerManager() {
     }
   }
 
+  // Vérifier si le joueur a des statistiques
+  const checkPlayerStats = async (playerId: string): Promise<boolean> => {
+    try {
+      const { data, error: statsError } = await supabase
+        .from('player_stats')
+        .select('player_id')
+        .eq('player_id', playerId)
+        .limit(1)
+
+      if (statsError) throw statsError
+      return (data?.length || 0) > 0
+    } catch (err) {
+      console.error('Error checking player stats:', err)
+      return false
+    }
+  }
+
   // Supprimer tous les matchs d'un joueur
   const deletePlayerMatches = async (playerId: string): Promise<void> => {
     try {
@@ -108,6 +125,21 @@ export default function PlayerManager() {
     } catch (err) {
       console.error('Error deleting player matches:', err)
       throw new Error('Failed to delete player matches')
+    }
+  }
+
+  // Supprimer les statistiques du joueur
+  const deletePlayerStats = async (playerId: string): Promise<void> => {
+    try {
+      const { error: statsError } = await supabase
+        .from('player_stats')
+        .delete()
+        .eq('player_id', playerId)
+
+      if (statsError) throw statsError
+    } catch (err) {
+      console.error('Error deleting player stats:', err)
+      throw new Error('Failed to delete player stats')
     }
   }
 
@@ -249,23 +281,28 @@ export default function PlayerManager() {
   const handleDelete = async (playerId: string): Promise<void> => {
     const playerName = players.find(p => p.player_id === playerId)?.player_name || 'This player'
     const matches = await checkPlayerMatches(playerId)
+    const hasStats = await checkPlayerStats(playerId)
     
-    if (matches.length > 0) {
-      const confirmMessage = `WARNING: This player has ${matches.length} match(es) in the system.\n\n` +
-                           `This action will PERMANENTLY DELETE:\n` +
-                           `• All matches involving this player (${matches.length} match(es))\n` +
-                           `• All tournament participations\n` +
-                           `• The player profile\n\n` +
-                           `This action cannot be undone!\n\n` +
-                           `Are you absolutely sure you want to proceed?`
+    let deleteMessage = `Are you sure you want to delete ${playerName}? This action cannot be undone.`
+    
+    if (matches.length > 0 || hasStats) {
+      deleteMessage = `WARNING: This action will PERMANENTLY DELETE:\n\n` +
+                     `• The player profile\n` +
+                     `• All tournament participations\n`
       
-      if (!confirm(confirmMessage)) {
-        return
+      if (matches.length > 0) {
+        deleteMessage += `• All matches involving this player (${matches.length} match(es))\n`
       }
-    } else {
-      if (!confirm(`Are you sure you want to delete ${playerName}? This action cannot be undone.`)) {
-        return
+      
+      if (hasStats) {
+        deleteMessage += `• All player statistics\n`
       }
+      
+      deleteMessage += `\nThis action cannot be undone!\n\nAre you absolutely sure you want to proceed?`
+    }
+
+    if (!confirm(deleteMessage)) {
+      return
     }
 
     setDeletingPlayer(playerId)
@@ -276,10 +313,15 @@ export default function PlayerManager() {
         await deletePlayerMatches(playerId)
       }
 
-      // Étape 2: Supprimer les participations aux tournois
+      // Étape 2: Supprimer les statistiques du joueur
+      if (hasStats) {
+        await deletePlayerStats(playerId)
+      }
+
+      // Étape 3: Supprimer les participations aux tournois
       await deleteTournamentParticipations(playerId)
 
-      // Étape 3: Supprimer le joueur lui-même
+      // Étape 4: Supprimer le joueur lui-même
       const { error } = await supabase
         .from('players')
         .delete()
@@ -287,10 +329,15 @@ export default function PlayerManager() {
 
       if (error) throw error
       
-      // Message de confirmation avec le nombre de matchs supprimés
-      const successMessage = matches.length > 0 
-        ? `Player deleted successfully. ${matches.length} match(es) were also deleted.`
-        : 'Player deleted successfully.'
+      // Message de confirmation
+      let successMessage = 'Player deleted successfully.'
+      const deletedItems = []
+      
+      if (matches.length > 0) deletedItems.push(`${matches.length} match(es)`)
+      if (hasStats) deletedItems.push('player statistics')
+      if (deletedItems.length > 0) {
+        successMessage += ` Also deleted: ${deletedItems.join(', ')}.`
+      }
       
       alert(successMessage)
       await fetchData()
@@ -298,7 +345,12 @@ export default function PlayerManager() {
     } catch (err: unknown) {
       console.error('Error deleting player:', err)
       const errorMessage = err instanceof Error ? err.message : 'Error deleting player'
-      alert(`Delete failed: ${errorMessage}`)
+      
+      if (errorMessage.includes('foreign key constraint')) {
+        alert('Cannot delete player: There are still references to this player in the database. Please check for additional dependencies.')
+      } else {
+        alert(`Delete failed: ${errorMessage}`)
+      }
     } finally {
       setDeletingPlayer(null)
     }
