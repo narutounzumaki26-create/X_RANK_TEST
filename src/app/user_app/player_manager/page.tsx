@@ -72,7 +72,6 @@ export default function PlayerManager() {
       if (matchesError) throw matchesError
 
       return (matches || []).map(match => {
-        // Gérer le cas où tournaments peut être un tableau ou un objet simple
         let tournamentName = 'Tournoi inconnu'
         if (match.tournaments) {
           if (Array.isArray(match.tournaments)) {
@@ -96,66 +95,103 @@ export default function PlayerManager() {
     }
   }
 
-  // Vérifier si le joueur a des statistiques
-  const checkPlayerStats = async (playerId: string): Promise<boolean> => {
-    try {
-      const { data, error: statsError } = await supabase
-        .from('player_stats')
-        .select('player_id')
-        .eq('player_id', playerId)
-        .limit(1)
-
-      if (statsError) throw statsError
-      return (data?.length || 0) > 0
-    } catch (err) {
-      console.error('Error checking player stats:', err)
-      return false
+  // Vérifier si le joueur a des données dans d'autres tables
+  const checkPlayerReferences = async (playerId: string) => {
+    const references = {
+      matches: 0,
+      player_stats: 0,
+      points: 0,
+      tournament_participants: 0
     }
-  }
 
-  // Supprimer tous les matchs d'un joueur
-  const deletePlayerMatches = async (playerId: string): Promise<void> => {
     try {
-      const { error: matchesError } = await supabase
+      // Vérifier les matchs
+      const { count: matchesCount, error: matchesError } = await supabase
         .from('matches')
-        .delete()
+        .select('*', { count: 'exact', head: true })
         .or(`player1_id.eq.${playerId},player2_id.eq.${playerId}`)
 
-      if (matchesError) throw matchesError
-    } catch (err) {
-      console.error('Error deleting player matches:', err)
-      throw new Error('Failed to delete player matches')
-    }
-  }
+      if (!matchesError) references.matches = matchesCount || 0
 
-  // Supprimer les statistiques du joueur
-  const deletePlayerStats = async (playerId: string): Promise<void> => {
-    try {
-      const { error: statsError } = await supabase
+      // Vérifier les statistiques
+      const { count: statsCount, error: statsError } = await supabase
         .from('player_stats')
-        .delete()
+        .select('*', { count: 'exact', head: true })
         .eq('player_id', playerId)
 
-      if (statsError) throw statsError
+      if (!statsError) references.player_stats = statsCount || 0
+
+      // Vérifier les points
+      const { count: pointsCount, error: pointsError } = await supabase
+        .from('points')
+        .select('*', { count: 'exact', head: true })
+        .eq('player_id', playerId)
+
+      if (!pointsError) references.points = pointsCount || 0
+
+      // Vérifier les participations aux tournois
+      const { count: participantsCount, error: participantsError } = await supabase
+        .from('tournament_participants')
+        .select('*', { count: 'exact', head: true })
+        .eq('player_id', playerId)
+
+      if (!participantsError) references.tournament_participants = participantsCount || 0
+
     } catch (err) {
-      console.error('Error deleting player stats:', err)
-      throw new Error('Failed to delete player stats')
+      console.error('Error checking player references:', err)
     }
+
+    return references
   }
 
-  // Supprimer les participations aux tournois
-  const deleteTournamentParticipations = async (playerId: string): Promise<void> => {
+  // Supprimer toutes les données d'un joueur
+  const deleteAllPlayerData = async (playerId: string): Promise<{ [key: string]: number }> => {
+    const deletedCounts = {
+      matches: 0,
+      player_stats: 0,
+      points: 0,
+      tournament_participants: 0
+    }
+
     try {
-      const { error: participantsError } = await supabase
-        .from('tournament_participants')
-        .delete()
+      // 1. Supprimer les matchs
+      const { count: matchesCount, error: matchesError } = await supabase
+        .from('matches')
+        .delete({ count: 'exact' })
+        .or(`player1_id.eq.${playerId},player2_id.eq.${playerId}`)
+
+      if (!matchesError) deletedCounts.matches = matchesCount || 0
+
+      // 2. Supprimer les statistiques
+      const { count: statsCount, error: statsError } = await supabase
+        .from('player_stats')
+        .delete({ count: 'exact' })
         .eq('player_id', playerId)
 
-      if (participantsError) throw participantsError
+      if (!statsError) deletedCounts.player_stats = statsCount || 0
+
+      // 3. Supprimer les points
+      const { count: pointsCount, error: pointsError } = await supabase
+        .from('points')
+        .delete({ count: 'exact' })
+        .eq('player_id', playerId)
+
+      if (!pointsError) deletedCounts.points = pointsCount || 0
+
+      // 4. Supprimer les participations aux tournois
+      const { count: participantsCount, error: participantsError } = await supabase
+        .from('tournament_participants')
+        .delete({ count: 'exact' })
+        .eq('player_id', playerId)
+
+      if (!participantsError) deletedCounts.tournament_participants = participantsCount || 0
+
     } catch (err) {
-      console.error('Error deleting tournament participations:', err)
-      throw new Error('Failed to delete tournament participations')
+      console.error('Error deleting player data:', err)
+      throw new Error('Failed to delete player data')
     }
+
+    return deletedCounts
   }
 
   const fetchData = async (): Promise<void> => {
@@ -280,23 +316,21 @@ export default function PlayerManager() {
 
   const handleDelete = async (playerId: string): Promise<void> => {
     const playerName = players.find(p => p.player_id === playerId)?.player_name || 'This player'
-    const matches = await checkPlayerMatches(playerId)
-    const hasStats = await checkPlayerStats(playerId)
+    
+    // Vérifier toutes les références
+    const references = await checkPlayerReferences(playerId)
+    const totalReferences = Object.values(references).reduce((sum, count) => sum + count, 0)
     
     let deleteMessage = `Are you sure you want to delete ${playerName}? This action cannot be undone.`
     
-    if (matches.length > 0 || hasStats) {
+    if (totalReferences > 0) {
       deleteMessage = `WARNING: This action will PERMANENTLY DELETE:\n\n` +
-                     `• The player profile\n` +
-                     `• All tournament participations\n`
+                     `• The player profile\n`
       
-      if (matches.length > 0) {
-        deleteMessage += `• All matches involving this player (${matches.length} match(es))\n`
-      }
-      
-      if (hasStats) {
-        deleteMessage += `• All player statistics\n`
-      }
+      if (references.matches > 0) deleteMessage += `• ${references.matches} match(es)\n`
+      if (references.player_stats > 0) deleteMessage += `• Player statistics\n`
+      if (references.points > 0) deleteMessage += `• ${references.points} point record(s)\n`
+      if (references.tournament_participants > 0) deleteMessage += `• ${references.tournament_participants} tournament participation(s)\n`
       
       deleteMessage += `\nThis action cannot be undone!\n\nAre you absolutely sure you want to proceed?`
     }
@@ -308,20 +342,10 @@ export default function PlayerManager() {
     setDeletingPlayer(playerId)
     
     try {
-      // Étape 1: Supprimer tous les matchs du joueur
-      if (matches.length > 0) {
-        await deletePlayerMatches(playerId)
-      }
+      // Supprimer toutes les données du joueur
+      const deletedCounts = await deleteAllPlayerData(playerId)
 
-      // Étape 2: Supprimer les statistiques du joueur
-      if (hasStats) {
-        await deletePlayerStats(playerId)
-      }
-
-      // Étape 3: Supprimer les participations aux tournois
-      await deleteTournamentParticipations(playerId)
-
-      // Étape 4: Supprimer le joueur lui-même
+      // Finalement supprimer le joueur lui-même
       const { error } = await supabase
         .from('players')
         .delete()
@@ -329,12 +353,15 @@ export default function PlayerManager() {
 
       if (error) throw error
       
-      // Message de confirmation
+      // Message de confirmation détaillé
       let successMessage = 'Player deleted successfully.'
       const deletedItems = []
       
-      if (matches.length > 0) deletedItems.push(`${matches.length} match(es)`)
-      if (hasStats) deletedItems.push('player statistics')
+      if (deletedCounts.matches > 0) deletedItems.push(`${deletedCounts.matches} match(es)`)
+      if (deletedCounts.player_stats > 0) deletedItems.push('player statistics')
+      if (deletedCounts.points > 0) deletedItems.push(`${deletedCounts.points} point record(s)`)
+      if (deletedCounts.tournament_participants > 0) deletedItems.push(`${deletedCounts.tournament_participants} tournament participation(s)`)
+      
       if (deletedItems.length > 0) {
         successMessage += ` Also deleted: ${deletedItems.join(', ')}.`
       }
@@ -347,7 +374,14 @@ export default function PlayerManager() {
       const errorMessage = err instanceof Error ? err.message : 'Error deleting player'
       
       if (errorMessage.includes('foreign key constraint')) {
-        alert('Cannot delete player: There are still references to this player in the database. Please check for additional dependencies.')
+        // Essayer de trouver quelle table pose encore problème
+        const remainingRefs = await checkPlayerReferences(playerId)
+        const remainingTables = Object.entries(remainingRefs)
+          .filter(([_, count]) => count > 0)
+          .map(([table]) => table)
+          .join(', ')
+        
+        alert(`Cannot delete player: There are still references in the following tables: ${remainingTables}. Please contact administrator.`)
       } else {
         alert(`Delete failed: ${errorMessage}`)
       }
