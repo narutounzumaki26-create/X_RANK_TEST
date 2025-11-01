@@ -20,7 +20,6 @@ type Player = {
   player_region: string | null
   player_birth_date?: string | null
   player_first_name?: string | null
-  player_list_name?: string | null
 }
 
 type Match = {
@@ -404,7 +403,7 @@ export default function LeaderboardPage() {
           tournamentsResponse,
           participantsResponse
         ] = await Promise.all([
-          supabase.from("players").select("player_id, player_name, player_region, player_birth_date, player_first_name, player_list_name"),
+          supabase.from("players").select("player_id, player_name, player_region, player_birth_date, player_first_name"),
           supabase.from("matches").select("match_id, tournament_id, player1_id, player2_id, winner_id, rounds, spin_finishes, over_finishes, burst_finishes, xterms_finishes, spin_finishes2, over_finishes2, burst_finishes2, xterms_finishes2"),
           supabase.from("tournaments").select("tournament_id, name, status, date, location"),
           supabase.from("tournament_participants").select("tournament_id, player_id, is_validated, placement")
