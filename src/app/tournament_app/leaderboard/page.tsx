@@ -48,7 +48,7 @@ async function calculateLeaderboard(region?: string, tournamentId?: string | nul
 
   const playerStats = new Map()
 
-  matches?.forEach(match => {
+  matches?.forEach((match: any) => {
     const player1 = match.player1?.[0] || match.player1
     const player2 = match.player2?.[0] || match.player2
 
@@ -62,16 +62,16 @@ async function calculateLeaderboard(region?: string, tournamentId?: string | nul
     updatePlayerStats(playerStats, player2, match, match.winner_id === player2.player_id)
   })
 
-  const leaderboard = Array.from(playerStats.values()).map(entry => ({
+  const leaderboard = Array.from(playerStats.values()).map((entry: any) => ({
     ...entry,
     win_rate: entry.total_matches > 0 ? (entry.wins / entry.total_matches) * 100 : 0
   }))
 
-  leaderboard.sort((a, b) => b.total_score - a.total_score)
+  leaderboard.sort((a: any, b: any) => b.total_score - a.total_score)
   return leaderboard
 }
 
-function updatePlayerStats(stats, player, match, isWinner) {
+function updatePlayerStats(stats: any, player: any, match: any, isWinner: boolean) {
   const existing = stats.get(player.player_id) || {
     player_id: player.player_id,
     player_name: player.player_name || 'Unknown',
@@ -127,7 +127,19 @@ async function getTournaments() {
   return data || []
 }
 
-function LeaderboardSection({ title, subtitle, icon: Icon, data, emptyMessage = "Aucune donnée disponible" }) {
+function LeaderboardSection({ 
+  title, 
+  subtitle, 
+  icon: Icon, 
+  data, 
+  emptyMessage = "Aucune donnée disponible" 
+}: { 
+  title: string
+  subtitle: string
+  icon: any
+  data: any[]
+  emptyMessage?: string
+}) {
   return (
     <Card className="border border-white/10 bg-black/70 shadow-[0_0_28px_rgba(0,255,255,0.25)]">
       <CardHeader className="pb-2 text-center">
@@ -140,7 +152,7 @@ function LeaderboardSection({ title, subtitle, icon: Icon, data, emptyMessage = 
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {data.length > 0 ? data.map((entry, index) => {
+        {data.length > 0 ? data.map((entry: any, index: number) => {
           let bgColor = "bg-white/5 border border-white/15"
           let trophyIcon = null
 
@@ -194,11 +206,11 @@ export default async function LeaderboardPage() {
     ])
 
     const regionalLeaderboards = await Promise.all(
-      regions.map(region => calculateLeaderboard(region))
+      regions.map((region: string) => calculateLeaderboard(region))
     )
 
     const tournamentLeaderboards = await Promise.all(
-      tournaments.map(tournament => calculateLeaderboard(undefined, tournament.tournament_id))
+      tournaments.map((tournament: any) => calculateLeaderboard(undefined, tournament.tournament_id))
     )
 
     const officialMatchesLeaderboard = await calculateLeaderboard(undefined, null)
@@ -234,7 +246,7 @@ export default async function LeaderboardPage() {
             Classements Régionaux
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {regionalLeaderboards.map((leaderboard, index) => {
+            {regionalLeaderboards.map((leaderboard: any[], index: number) => {
               const region = regions[index]
               if (!leaderboard.length) return null
               
@@ -259,7 +271,7 @@ export default async function LeaderboardPage() {
             Classements Tournois
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {tournamentLeaderboards.map((leaderboard, index) => {
+            {tournamentLeaderboards.map((leaderboard: any[], index: number) => {
               const tournament = tournaments[index]
               if (!leaderboard.length) return null
               
