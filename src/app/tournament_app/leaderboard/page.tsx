@@ -2,7 +2,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
-import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
+import { supabase } from "@/lib/supabaseClient"
 import { Trophy, Globe, MapPin, Sword, Users } from "lucide-react"
 import { CyberPage } from "@/components/layout/CyberPage"
 import { MainMenuButton } from "@/components/navigation/MainMenuButton"
@@ -13,6 +13,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card"
+
 
 type Player = {
   player_id: string
@@ -158,6 +159,7 @@ export default function LeaderboardPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const createSupabaseBrowserClient = supabase()
 
   // Fetch data on component mount
   useEffect(() => {
