@@ -1,39 +1,14 @@
 // lib/leaderboard-calculations.ts
 import { createSupabaseServerClient } from "@/lib/supabaseServer"
 
-// Type definitions
+// Type definitions based on your actual database schema
 interface Player {
   player_id: string
   player_name: string | null
   player_region: string | null
 }
 
-interface Tournament {
-  tournament_id: string
-  name: string
-  date: string
-}
-
-interface Match {
-  match_id: string
-  player_id: string
-  player2_id: string
-  winner_id: string
-  tournament_id: string | null
-  spin_finishes: number | null
-  over_finishes: number | null
-  burst_finishes: number | null
-  xtreme_finishes: number | null
-  spin_finishes2: number | null
-  over_finishes2: number | null
-  burst_finishes2: number | null
-  xtreme_finishes2: number | null
-  players_matches_player_id_fkey: Player
-  players_matches_player2_id_fkey: Player
-  tournaments: Tournament | null
-}
-
-export interface LeaderboardEntry {
+interface LeaderboardEntry {
   player_id: string
   player_name: string
   player_region: string | null
@@ -43,15 +18,49 @@ export interface LeaderboardEntry {
   win_rate: number
 }
 
-export interface LeaderboardOptions {
+interface LeaderboardOptions {
   region?: string
   tournamentId?: string | null
+}
+
+// Define the match structure based on your actual database columns
+interface MatchData {
+  match_id: string
+  player_id: string
+  player2_id: string
+  winner_id: string
+  tournament_id: string | null
+  rounds: number
+  created_by: string | null
+  loser_id: string | null
+  match_logs: string | null
+  spin_finished: number | null
+  over_finished: number | null
+  burst_finished: number | null
+  xtreme_finished: number | null
+  spin_finished2: number | null
+  over_finished2: number | null
+  burst_finished2: number | null
+  xtreme_finished2: number | null
+  Data_Creation: string | null
+  players_matches_player_id_fkey?: Player[] | Player
+  players_matches_player2_id_fkey?: Player[] | Player
+}
+
+// Type guard to check if an object has the required player properties
+function isValidPlayer(player: unknown): player is Player {
+  return (
+    typeof player === 'object' &&
+    player !== null &&
+    'player_id' in player &&
+    'player_name' in player
+  )
 }
 
 export async function calculateLeaderboard(options?: LeaderboardOptions): Promise<LeaderboardEntry[]> {
   const supabase = await createSupabaseServerClient()
 
-  // Get all matches with filters
+  // Get all matches with filters - using correct column names from your database
   let matchQuery = supabase
     .from('matches')
     .select(`
@@ -60,14 +69,19 @@ export async function calculateLeaderboard(options?: LeaderboardOptions): Promis
       player2_id,
       winner_id,
       tournament_id,
-      spin_finishes,
-      over_finishes,
-      burst_finishes,
-      xtreme_finishes,
-      spin_finishes2,
-      over_finishes2,
-      burst_finishes2,
-      xtreme_finishes2,
+      rounds,
+      created_by,
+      loser_id,
+      match_logs,
+      spin_finished,
+      over_finished,
+      burst_finished,
+      xtreme_finished,
+      spin_finished2,
+      over_finished2,
+      burst_finished2,
+      xtreme_finished2,
+      Data_Creation,
       players!matches_player_id_fkey(
         player_id,
         player_name,
@@ -100,11 +114,21 @@ export async function calculateLeaderboard(options?: LeaderboardOptions): Promis
   // Calculate player statistics
   const playerStats = new Map<string, LeaderboardEntry>()
 
-  matches?.forEach((match: Match) => {
-    const player1 = match.players_matches_player_id_fkey
-    const player2 = match.players_matches_player2_id_fkey
+  matches?.forEach((match: MatchData) => {
+    // Safely extract players from the match data
+    const player1 = Array.isArray(match.players_matches_player_id_fkey) 
+      ? match.players_matches_player_id_fkey[0]
+      : match.players_matches_player_id_fkey
     
-    if (!player1 || !player2) return
+    const player2 = Array.isArray(match.players_matches_player2_id_fkey)
+      ? match.players_matches_player2_id_fkey[0]
+      : match.players_matches_player2_id_fkey
+
+    // Validate players
+    if (!isValidPlayer(player1) || !isValidPlayer(player2)) {
+      console.warn('Invalid player data in match:', match.match_id)
+      return
+    }
 
     // Apply regional filter if specified
     if (options?.region) {
@@ -135,7 +159,7 @@ export async function calculateLeaderboard(options?: LeaderboardOptions): Promis
 function updatePlayerStats(
   stats: Map<string, LeaderboardEntry>,
   player: Player,
-  match: Match,
+  match: MatchData,
   isWinner: boolean
 ): void {
   const existing = stats.get(player.player_id) || {
@@ -162,17 +186,17 @@ function updatePlayerStats(
   stats.set(player.player_id, existing)
 }
 
-function calculateMatchPoints(match: Match, isWinner: boolean): number {
+function calculateMatchPoints(match: MatchData, isWinner: boolean): number {
   let points = 0
 
   if (isWinner) {
     points += 100 // Base points for win
     
-    // Bonus points for finish types
-    const finishes = match.spin_finishes || 0
-    const overFinishes = match.over_finishes || 0
-    const burstFinishes = match.burst_finishes || 0
-    const xtremeFinishes = match.xtreme_finishes || 0
+    // Bonus points for finish types - using correct column names
+    const finishes = match.spin_finished || 0
+    const overFinishes = match.over_finished || 0
+    const burstFinishes = match.burst_finished || 0
+    const xtremeFinishes = match.xtreme_finished || 0
 
     points += finishes * 10
     points += overFinishes * 15
@@ -183,19 +207,26 @@ function calculateMatchPoints(match: Match, isWinner: boolean): number {
     if (match.tournament_id) {
       points += 50
     }
+
+    // Bonus for more rounds (longer matches are harder)
+    points += match.rounds * 2
+
   } else {
     points += 25 // Participation points
     
-    // Points for finishes even if lost
-    const finishes = match.spin_finishes2 || 0
-    const overFinishes = match.over_finishes2 || 0
-    const burstFinishes = match.burst_finishes2 || 0
-    const xtremeFinishes = match.xtreme_finishes2 || 0
+    // Points for finishes even if lost - using correct column names
+    const finishes = match.spin_finished2 || 0
+    const overFinishes = match.over_finished2 || 0
+    const burstFinishes = match.burst_finished2 || 0
+    const xtremeFinishes = match.xtreme_finished2 || 0
 
     points += finishes * 5
     points += overFinishes * 8
     points += burstFinishes * 10
     points += xtremeFinishes * 15
+
+    // Small bonus for rounds even when losing
+    points += match.rounds * 1
   }
 
   return points
