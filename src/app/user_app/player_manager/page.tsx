@@ -24,6 +24,16 @@ interface MatchReference {
   opponent_name: string | null
 }
 
+interface MatchRow {
+  match_id: string
+  tournament_id: string
+  player1_id: string
+  player2_id: string
+  tournaments: {
+    name: string
+  } | null
+}
+
 export default function PlayerManager() {
   const [players, setPlayers] = useState<Player[]>([])
   const [loading, setLoading] = useState<boolean>(true)
@@ -57,16 +67,29 @@ export default function PlayerManager() {
           tournaments (name)
         `)
         .or(`player1_id.eq.${playerId},player2_id.eq.${playerId}`)
+        .returns<MatchRow[]>()
 
       if (matchesError) throw matchesError
 
-      return (matches || []).map(match => ({
-        match_id: match.match_id,
-        tournament_name: match.tournaments?.name || 'Tournoi inconnu',
-        opponent_name: match.player1_id === playerId 
-          ? (players.find(p => p.player_id === match.player2_id)?.player_name || 'Adversaire inconnu')
-          : (players.find(p => p.player_id === match.player1_id)?.player_name || 'Adversaire inconnu')
-      }))
+      return (matches || []).map(match => {
+        // Gérer le cas où tournaments peut être un tableau ou un objet simple
+        let tournamentName = 'Tournoi inconnu'
+        if (match.tournaments) {
+          if (Array.isArray(match.tournaments)) {
+            tournamentName = match.tournaments[0]?.name || 'Tournoi inconnu'
+          } else {
+            tournamentName = match.tournaments.name || 'Tournoi inconnu'
+          }
+        }
+
+        return {
+          match_id: match.match_id,
+          tournament_name: tournamentName,
+          opponent_name: match.player1_id === playerId 
+            ? (players.find(p => p.player_id === match.player2_id)?.player_name || 'Adversaire inconnu')
+            : (players.find(p => p.player_id === match.player1_id)?.player_name || 'Adversaire inconnu')
+        }
+      })
     } catch (err) {
       console.error('Error checking player matches:', err)
       return []
