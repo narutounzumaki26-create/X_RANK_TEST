@@ -2,6 +2,7 @@
 "use client"
 
 import { useState, useEffect } from "react"
+import { createSupabaseBrowserClient } from "@/lib/supabaseClient"
 import { Trophy, Globe, MapPin, Sword, Users } from "lucide-react"
 import { CyberPage } from "@/components/layout/CyberPage"
 import { MainMenuButton } from "@/components/navigation/MainMenuButton"
@@ -163,24 +164,22 @@ export default function LeaderboardPage() {
     async function fetchData() {
       try {
         setLoading(true)
+        const supabase = createSupabaseBrowserClient()
         
-        // Fetch players
-        const playersResponse = await fetch('/api/players')
-        if (!playersResponse.ok) throw new Error('Failed to fetch players')
-        const playersData = await playersResponse.json()
-        setPlayers(playersData)
+        // Fetch all data in parallel
+        const [playersResponse, matchesResponse, tournamentsResponse] = await Promise.all([
+          supabase.from("players").select("player_id, player_name, player_region"),
+          supabase.from("matches").select("match_id, tournament_id, player1_id, player2_id, winner_id"),
+          supabase.from("tournaments").select("tournament_id, name, status")
+        ])
 
-        // Fetch matches
-        const matchesResponse = await fetch('/api/matches')
-        if (!matchesResponse.ok) throw new Error('Failed to fetch matches')
-        const matchesData = await matchesResponse.json()
-        setMatches(matchesData)
+        if (playersResponse.error) throw new Error(playersResponse.error.message)
+        if (matchesResponse.error) throw new Error(matchesResponse.error.message)
+        if (tournamentsResponse.error) throw new Error(tournamentsResponse.error.message)
 
-        // Fetch tournaments
-        const tournamentsResponse = await fetch('/api/tournaments')
-        if (!tournamentsResponse.ok) throw new Error('Failed to fetch tournaments')
-        const tournamentsData = await tournamentsResponse.json()
-        setTournaments(tournamentsData)
+        setPlayers(playersResponse.data || [])
+        setMatches(matchesResponse.data || [])
+        setTournaments(tournamentsResponse.data || [])
 
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred')
@@ -233,6 +232,16 @@ export default function LeaderboardPage() {
   const regions = [...new Set(players.map(p => p.player_region).filter(Boolean))] as string[]
   const activeTournaments = tournaments.filter(t => t.status === "active")
 
+  // Auto-select first region/tournament when switching to those views
+  useEffect(() => {
+    if (activeBoard === "regional" && !selectedRegion && regions.length > 0) {
+      setSelectedRegion(regions[0])
+    }
+    if (activeBoard === "tournament" && !selectedTournament && activeTournaments.length > 0) {
+      setSelectedTournament(activeTournaments[0].tournament_id)
+    }
+  }, [activeBoard, selectedRegion, selectedTournament, regions, activeTournaments])
+
   // Get current data based on active board
   let currentData: LeaderboardEntry[] = []
   let currentTitle = ""
@@ -257,10 +266,6 @@ export default function LeaderboardPage() {
         currentTitle = `📍 ${selectedRegion}`
         currentDescription = "Classement régional"
       } else {
-        // Auto-select first region if none selected
-        if (regions.length > 0) {
-          setSelectedRegion(regions[0])
-        }
         currentData = []
         currentTitle = "📍 Sélectionnez une région"
         currentDescription = "Choisissez une région dans la liste ci-dessous"
@@ -274,10 +279,6 @@ export default function LeaderboardPage() {
         currentTitle = `🏆 ${tournamentInfo?.name || "Tournoi"}`
         currentDescription = "Classement du tournoi"
       } else {
-        // Auto-select first tournament if none selected
-        if (activeTournaments.length > 0) {
-          setSelectedTournament(activeTournaments[0].tournament_id)
-        }
         currentData = []
         currentTitle = "🏆 Sélectionnez un tournoi"
         currentDescription = "Choisissez un tournoi dans la liste ci-dessous"
