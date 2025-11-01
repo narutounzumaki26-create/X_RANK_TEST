@@ -76,32 +76,27 @@ async function getLeaderboardData(
   return leaderboard.filter(entry => entry.wins > 0).sort((a, b) => b.wins - a.wins)
 }
 
-// Selection Window Component
+// Selection Window Component (now static)
 function SelectionWindow({
   icon,
   title,
   description,
-  isActive,
-  onClick
+  isActive
 }: {
   icon: React.ReactNode
   title: string
   description: string
   isActive: boolean
-  onClick: () => void
 }) {
   return (
-    <button
-      onClick={onClick}
-      className={`p-4 rounded-xl border-2 transition-all duration-300 text-left group cursor-pointer ${
+    <div
+      className={`p-4 rounded-xl border-2 transition-all duration-300 ${
         isActive
           ? "border-cyan-400 bg-cyan-500/10 shadow-[0_0_25px_rgba(0,255,255,0.35)]"
-          : "border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10"
+          : "border-white/20 bg-white/5"
       }`}
     >
-      <div className={`mb-2 transition-colors ${
-        isActive ? "text-cyan-300" : "text-gray-400 group-hover:text-white"
-      }`}>
+      <div className={`mb-2 ${isActive ? "text-cyan-300" : "text-gray-400"}`}>
         {icon}
       </div>
       <h3 className={`font-mono font-bold text-sm mb-1 ${
@@ -114,7 +109,7 @@ function SelectionWindow({
       }`}>
         {description}
       </p>
-    </button>
+    </div>
   )
 }
 
@@ -254,19 +249,18 @@ export default async function LeaderboardPage() {
       header={{
         eyebrow: "datastream//ranking",
         title: "🏆 Multi-Leaderboards",
-        subtitle: "Sélectionnez une catégorie",
+        subtitle: "Classements par catégorie",
         actions: <MainMenuButton />,
       }}
       contentClassName="mx-auto w-full max-w-4xl gap-6"
     >
-      {/* Selection Grid */}
+      {/* Selection Grid - Now static display */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <SelectionWindow
           icon={<Globe className="h-5 w-5" />}
           title="Global"
           description="Tous les matchs"
           isActive={true}
-          onClick={() => {}}
         />
         
         <SelectionWindow
@@ -274,7 +268,6 @@ export default async function LeaderboardPage() {
           title="Officiels"
           description="Hors tournoi"
           isActive={false}
-          onClick={() => {}}
         />
         
         <SelectionWindow
@@ -282,7 +275,6 @@ export default async function LeaderboardPage() {
           title="Régional"
           description="Par région"
           isActive={false}
-          onClick={() => {}}
         />
         
         <SelectionWindow
@@ -290,7 +282,6 @@ export default async function LeaderboardPage() {
           title="Tournois"
           description="Compétitions"
           isActive={false}
-          onClick={() => {}}
         />
       </div>
 
