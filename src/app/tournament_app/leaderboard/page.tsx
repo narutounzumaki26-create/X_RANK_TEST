@@ -1,6 +1,6 @@
 // src/app/leaderboard/page.tsx
 import { createSupabaseServerClient } from "@/lib/supabaseServer"
-import { Trophy, Globe, MapPin, Sword } from "lucide-react"
+import { Trophy, Globe, MapPin, Sword, Users } from "lucide-react"
 import { CyberPage } from "@/components/layout/CyberPage"
 import { MainMenuButton } from "@/components/navigation/MainMenuButton"
 import {
@@ -10,7 +10,6 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card"
-import Link from "next/link"
 
 type Player = {
   player_id: string
@@ -77,118 +76,10 @@ async function getLeaderboardData(
   return leaderboard.filter(entry => entry.wins > 0).sort((a, b) => b.wins - a.wins)
 }
 
-// Selection Window Component with Link
-function SelectionWindow({
-  icon,
-  title,
-  description,
-  isActive,
-  href
-}: {
-  icon: React.ReactNode
-  title: string
-  description: string
-  isActive: boolean
-  href: string
-}) {
-  return (
-    <Link
-      href={href}
-      className={`p-4 rounded-xl border-2 transition-all duration-300 text-left group cursor-pointer block ${
-        isActive
-          ? "border-cyan-400 bg-cyan-500/10 shadow-[0_0_25px_rgba(0,255,255,0.35)] scale-105"
-          : "border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]"
-      }`}
-    >
-      <div className={`mb-2 transition-colors ${
-        isActive ? "text-cyan-300" : "text-gray-400 group-hover:text-white"
-      }`}>
-        {icon}
-      </div>
-      <h3 className={`font-mono font-bold text-sm mb-1 transition-colors ${
-        isActive ? "text-cyan-200" : "text-white group-hover:text-cyan-100"
-      }`}>
-        {title}
-      </h3>
-      <p className={`text-xs transition-colors ${
-        isActive ? "text-cyan-100/80" : "text-gray-400 group-hover:text-gray-300"
-      }`}>
-        {description}
-      </p>
-    </Link>
-  )
-}
-
-// Leaderboard Row Component
-function LeaderboardRow({ entry, index }: { entry: LeaderboardEntry; index: number }) {
-  let bgColor = "bg-white/5 border border-white/15"
-  let trophyIcon = null
-
-  if (index === 0) {
-    bgColor = "bg-yellow-400/15 border border-yellow-400/70 shadow-[0_0_18px_rgba(255,215,0,0.45)]"
-    trophyIcon = <Trophy className="mr-2 h-5 w-5 text-yellow-300" />
-  } else if (index === 1) {
-    bgColor = "bg-gray-300/10 border border-gray-300/60 shadow-[0_0_18px_rgba(192,192,192,0.35)]"
-    trophyIcon = <Trophy className="mr-2 h-5 w-5 text-gray-200" />
-  } else if (index === 2) {
-    bgColor = "bg-orange-400/15 border border-orange-400/70 shadow-[0_0_18px_rgba(255,140,0,0.35)]"
-    trophyIcon = <Trophy className="mr-2 h-5 w-5 text-orange-300" />
-  }
-
-  return (
-    <div
-      className={`flex items-center justify-between rounded-2xl px-5 py-4 font-mono text-white transition hover:-translate-y-1 ${bgColor}`}
-    >
-      <span className="flex items-center text-sm font-semibold tracking-wide">
-        {trophyIcon}
-        {index + 1}. {entry.player_name}
-      </span>
-      <span className="text-base text-cyan-200">{entry.wins} victoires</span>
-    </div>
-  )
-}
-
-// Leaderboard Card Component
-function LeaderboardCard({ 
-  title, 
-  description, 
-  data 
-}: { 
-  title: string
-  description: string
-  data: LeaderboardEntry[]
-}) {
-  return (
-    <Card className="border border-white/10 bg-black/70 shadow-[0_0_28px_rgba(0,255,255,0.25)]">
-      <CardHeader className="pb-2 text-center">
-        <CardTitle className="text-2xl text-cyan-200 drop-shadow-[0_0_16px_rgba(0,255,255,0.45)]">
-          {title}
-        </CardTitle>
-        <CardDescription className="text-gray-200/80">
-          {description}
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {data.map((entry, index) => (
-          <LeaderboardRow key={entry.player_id} entry={entry} index={index} />
-        ))}
-        {data.length === 0 && (
-          <div className="text-center text-gray-400 py-4">
-            Aucune donnée disponible
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  )
-}
-
-export default async function LeaderboardPage({
-  searchParams,
-}: {
-  searchParams: { [key: string]: string | string[] | undefined }
-}) {
+export default async function LeaderboardPage() {
   const supabase = await createSupabaseServerClient()
 
+  // Fetch all data
   const { data: playersData, error: playersError } = await supabase
     .from("players")
     .select("player_id, player_name, player_region")
@@ -214,157 +105,301 @@ export default async function LeaderboardPage({
     )
   }
 
-  // Get URL params to determine active view
-  const view = searchParams.view as string || "global"
-  const region = searchParams.region as string
-  const tournament = searchParams.tournament as string
-
-  // Get all data upfront
+  // Get regions and tournaments
   const regions = [...new Set(playersData.map(p => p.player_region).filter(Boolean))] as string[]
   const activeTournaments = tournamentsData.filter(t => t.status === "active")
 
-  let currentData: LeaderboardEntry[] = []
-  let currentTitle = ""
-  let currentDescription = ""
-
-  // Determine which data to show based on URL params
-  switch (view) {
-    case "global":
-      currentData = await getLeaderboardData(playersData as Player[], matchesData as Match[])
-      currentTitle = "🌍 Classement Global"
-      currentDescription = "Tous les matchs confondus"
-      break
-    
-    case "official":
-      currentData = await getLeaderboardData(
-        playersData as Player[], 
-        matchesData as Match[], 
-        { tournamentId: null }
-      )
-      currentTitle = "⚔️ Matchs Officiels"
-      currentDescription = "Matchs hors tournoi (tournament_id = null)"
-      break
-    
-    case "regional":
-      if (region) {
-        currentData = await getLeaderboardData(
-          playersData as Player[], 
-          matchesData as Match[], 
+  // Generate all leaderboards in parallel
+  const [
+    globalLeaderboard,
+    officialMatchesLeaderboard,
+    regionalLeaderboards,
+    tournamentLeaderboards
+  ] = await Promise.all([
+    getLeaderboardData(playersData as Player[], matchesData as Match[]),
+    getLeaderboardData(playersData as Player[], matchesData as Match[], { tournamentId: null }),
+    Promise.all(
+      regions.map(async (region) => {
+        const data = await getLeaderboardData(
+          playersData as Player[],
+          matchesData as Match[],
           { region }
         )
-        currentTitle = `📍 ${region}`
-        currentDescription = "Classement régional"
-      }
-      break
-    
-    case "tournament":
-      if (tournament) {
-        currentData = await getLeaderboardData(
-          playersData as Player[], 
-          matchesData as Match[], 
-          { tournamentId: tournament }
+        return { region, data }
+      })
+    ),
+    Promise.all(
+      activeTournaments.map(async (tournament) => {
+        const data = await getLeaderboardData(
+          playersData as Player[],
+          matchesData as Match[],
+          { tournamentId: tournament.tournament_id }
         )
-        const tournamentInfo = tournamentsData.find(t => t.tournament_id === tournament)
-        currentTitle = `🏆 ${tournamentInfo?.name || "Tournoi"}`
-        currentDescription = "Classement du tournoi"
-      }
-      break
-  }
-
-  // Fallback if no data for the selected view
-  if (currentData.length === 0 && (view === "regional" || view === "tournament")) {
-    currentData = await getLeaderboardData(playersData as Player[], matchesData as Match[])
-    currentTitle = "🌍 Classement Global"
-    currentDescription = "Aucune donnée disponible pour la sélection, affichage du classement global"
-  }
+        return { tournament, data }
+      })
+    )
+  ])
 
   return (
     <CyberPage
       header={{
         eyebrow: "datastream//ranking",
         title: "🏆 Multi-Leaderboards",
-        subtitle: "Sélectionnez une catégorie",
+        subtitle: "Classements par catégorie",
         actions: <MainMenuButton />,
       }}
       contentClassName="mx-auto w-full max-w-4xl gap-6"
     >
-      {/* Selection Grid */}
+      {/* Selection Grid - Visual Only */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <SelectionWindow
-          icon={<Globe className="h-5 w-5" />}
-          title="Global"
-          description="Tous les matchs"
-          isActive={view === "global"}
-          href="/leaderboard?view=global"
-        />
+        {/* Global */}
+        <div className="p-4 rounded-xl border-2 border-cyan-400 bg-cyan-500/10 shadow-[0_0_25px_rgba(0,255,255,0.35)] scale-105">
+          <div className="mb-2 text-cyan-300">
+            <Globe className="h-5 w-5" />
+          </div>
+          <h3 className="font-mono font-bold text-sm mb-1 text-cyan-200">
+            Global
+          </h3>
+          <p className="text-xs text-cyan-100/80">
+            Tous les matchs
+          </p>
+        </div>
         
-        <SelectionWindow
-          icon={<Sword className="h-5 w-5" />}
-          title="Officiels"
-          description="Hors tournoi"
-          isActive={view === "official"}
-          href="/leaderboard?view=official"
-        />
+        {/* Official */}
+        <div className="p-4 rounded-xl border-2 border-white/20 bg-white/5">
+          <div className="mb-2 text-gray-400">
+            <Sword className="h-5 w-5" />
+          </div>
+          <h3 className="font-mono font-bold text-sm mb-1 text-white">
+            Officiels
+          </h3>
+          <p className="text-xs text-gray-400">
+            Hors tournoi
+          </p>
+        </div>
         
-        <SelectionWindow
-          icon={<MapPin className="h-5 w-5" />}
-          title="Régional"
-          description="Par région"
-          isActive={view === "regional"}
-          href="/leaderboard?view=regional"
-        />
+        {/* Regional */}
+        <div className="p-4 rounded-xl border-2 border-white/20 bg-white/5">
+          <div className="mb-2 text-gray-400">
+            <MapPin className="h-5 w-5" />
+          </div>
+          <h3 className="font-mono font-bold text-sm mb-1 text-white">
+            Régional
+          </h3>
+          <p className="text-xs text-gray-400">
+            Par région
+          </p>
+        </div>
         
-        <SelectionWindow
-          icon={<Trophy className="h-5 w-5" />}
-          title="Tournois"
-          description="Compétitions"
-          isActive={view === "tournament"}
-          href="/leaderboard?view=tournament"
-        />
+        {/* Tournament */}
+        <div className="p-4 rounded-xl border-2 border-white/20 bg-white/5">
+          <div className="mb-2 text-gray-400">
+            <Trophy className="h-5 w-5" />
+          </div>
+          <h3 className="font-mono font-bold text-sm mb-1 text-white">
+            Tournois
+          </h3>
+          <p className="text-xs text-gray-400">
+            Compétitions
+          </p>
+        </div>
       </div>
 
-      {/* Sub-selection for Regional and Tournament */}
-      {(view === "regional" || view === "tournament") && (
-        <div className="flex flex-wrap gap-3 mb-6">
-          {view === "regional" && regions.map(regionItem => (
-            <Link
-              key={regionItem}
-              href={`/leaderboard?view=regional&region=${encodeURIComponent(regionItem)}`}
-              className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
-                region === regionItem
-                  ? "bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(0,255,255,0.3)]"
-                  : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
-              }`}
-            >
-              {regionItem}
-            </Link>
-          ))}
-          
-          {view === "tournament" && activeTournaments.map(tournamentItem => (
-            <Link
-              key={tournamentItem.tournament_id}
-              href={`/leaderboard?view=tournament&tournament=${tournamentItem.tournament_id}`}
-              className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
-                tournament === tournamentItem.tournament_id
-                  ? "bg-purple-500/20 border-purple-400 text-purple-200 shadow-[0_0_15px_rgba(192,132,252,0.3)]"
-                  : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
-              }`}
-            >
-              {tournamentItem.name}
-            </Link>
-          ))}
-        </div>
-      )}
+      {/* Global Leaderboard */}
+      <Card className="border border-white/10 bg-black/70 shadow-[0_0_28px_rgba(0,255,255,0.25)]">
+        <CardHeader className="pb-2 text-center">
+          <CardTitle className="text-2xl text-cyan-200 drop-shadow-[0_0_16px_rgba(0,255,255,0.45)]">
+            🌍 Classement Global
+          </CardTitle>
+          <CardDescription className="text-gray-200/80">
+            Tous les matchs confondus
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {globalLeaderboard.map((entry, index) => {
+            let bgColor = "bg-white/5 border border-white/15"
+            let trophyIcon = null
 
-      {/* Main Leaderboard Display */}
-      <LeaderboardCard
-        title={currentTitle}
-        description={currentDescription}
-        data={currentData}
-      />
+            if (index === 0) {
+              bgColor = "bg-yellow-400/15 border border-yellow-400/70 shadow-[0_0_18px_rgba(255,215,0,0.45)]"
+              trophyIcon = <Trophy className="mr-2 h-5 w-5 text-yellow-300" />
+            } else if (index === 1) {
+              bgColor = "bg-gray-300/10 border border-gray-300/60 shadow-[0_0_18px_rgba(192,192,192,0.35)]"
+              trophyIcon = <Trophy className="mr-2 h-5 w-5 text-gray-200" />
+            } else if (index === 2) {
+              bgColor = "bg-orange-400/15 border border-orange-400/70 shadow-[0_0_18px_rgba(255,140,0,0.35)]"
+              trophyIcon = <Trophy className="mr-2 h-5 w-5 text-orange-300" />
+            }
+
+            return (
+              <div
+                key={entry.player_id}
+                className={`flex items-center justify-between rounded-2xl px-5 py-4 font-mono text-white transition hover:-translate-y-1 ${bgColor}`}
+              >
+                <span className="flex items-center text-sm font-semibold tracking-wide">
+                  {trophyIcon}
+                  {index + 1}. {entry.player_name}
+                </span>
+                <span className="text-base text-cyan-200">{entry.wins} victoires</span>
+              </div>
+            )
+          })}
+          {globalLeaderboard.length === 0 && (
+            <div className="text-center text-gray-400 py-8">
+              <Users className="h-12 w-12 mx-auto mb-3 opacity-50" />
+              Aucune donnée disponible
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Official Matches Leaderboard */}
+      <Card className="border border-white/10 bg-black/70 shadow-[0_0_28px_rgba(0,255,255,0.25)]">
+        <CardHeader className="pb-2 text-center">
+          <CardTitle className="text-2xl text-cyan-200 drop-shadow-[0_0_16px_rgba(0,255,255,0.45)]">
+            ⚔️ Matchs Officiels
+          </CardTitle>
+          <CardDescription className="text-gray-200/80">
+            Matchs hors tournoi (tournament_id = null)
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          {officialMatchesLeaderboard.map((entry, index) => {
+            let bgColor = "bg-white/5 border border-white/15"
+            let trophyIcon = null
+
+            if (index === 0) {
+              bgColor = "bg-yellow-400/15 border border-yellow-400/70 shadow-[0_0_18px_rgba(255,215,0,0.45)]"
+              trophyIcon = <Trophy className="mr-2 h-5 w-5 text-yellow-300" />
+            } else if (index === 1) {
+              bgColor = "bg-gray-300/10 border border-gray-300/60 shadow-[0_0_18px_rgba(192,192,192,0.35)]"
+              trophyIcon = <Trophy className="mr-2 h-5 w-5 text-gray-200" />
+            } else if (index === 2) {
+              bgColor = "bg-orange-400/15 border border-orange-400/70 shadow-[0_0_18px_rgba(255,140,0,0.35)]"
+              trophyIcon = <Trophy className="mr-2 h-5 w-5 text-orange-300" />
+            }
+
+            return (
+              <div
+                key={entry.player_id}
+                className={`flex items-center justify-between rounded-2xl px-5 py-4 font-mono text-white transition hover:-translate-y-1 ${bgColor}`}
+              >
+                <span className="flex items-center text-sm font-semibold tracking-wide">
+                  {trophyIcon}
+                  {index + 1}. {entry.player_name}
+                </span>
+                <span className="text-base text-cyan-200">{entry.wins} victoires</span>
+              </div>
+            )
+          })}
+          {officialMatchesLeaderboard.length === 0 && (
+            <div className="text-center text-gray-400 py-4">
+              Aucune donnée disponible
+            </div>
+          )}
+        </CardContent>
+      </Card>
+
+      {/* Regional Leaderboards */}
+      {regionalLeaderboards.map(({ region, data }) => (
+        <Card key={region} className="border border-white/10 bg-black/70 shadow-[0_0_28px_rgba(0,255,255,0.25)]">
+          <CardHeader className="pb-2 text-center">
+            <CardTitle className="text-2xl text-cyan-200 drop-shadow-[0_0_16px_rgba(0,255,255,0.45)]">
+              📍 {region}
+            </CardTitle>
+            <CardDescription className="text-gray-200/80">
+              Classement régional
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {data.map((entry, index) => {
+              let bgColor = "bg-white/5 border border-white/15"
+              let trophyIcon = null
+
+              if (index === 0) {
+                bgColor = "bg-yellow-400/15 border border-yellow-400/70 shadow-[0_0_18px_rgba(255,215,0,0.45)]"
+                trophyIcon = <Trophy className="mr-2 h-5 w-5 text-yellow-300" />
+              } else if (index === 1) {
+                bgColor = "bg-gray-300/10 border border-gray-300/60 shadow-[0_0_18px_rgba(192,192,192,0.35)]"
+                trophyIcon = <Trophy className="mr-2 h-5 w-5 text-gray-200" />
+              } else if (index === 2) {
+                bgColor = "bg-orange-400/15 border border-orange-400/70 shadow-[0_0_18px_rgba(255,140,0,0.35)]"
+                trophyIcon = <Trophy className="mr-2 h-5 w-5 text-orange-300" />
+              }
+
+              return (
+                <div
+                  key={entry.player_id}
+                  className={`flex items-center justify-between rounded-2xl px-5 py-4 font-mono text-white transition hover:-translate-y-1 ${bgColor}`}
+                >
+                  <span className="flex items-center text-sm font-semibold tracking-wide">
+                    {trophyIcon}
+                    {index + 1}. {entry.player_name}
+                  </span>
+                  <span className="text-base text-cyan-200">{entry.wins} victoires</span>
+                </div>
+              )
+            })}
+            {data.length === 0 && (
+              <div className="text-center text-gray-400 py-4">
+                Aucune donnée disponible
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ))}
+
+      {/* Tournament Leaderboards */}
+      {tournamentLeaderboards.map(({ tournament, data }) => (
+        <Card key={tournament.tournament_id} className="border border-white/10 bg-black/70 shadow-[0_0_28px_rgba(0,255,255,0.25)]">
+          <CardHeader className="pb-2 text-center">
+            <CardTitle className="text-2xl text-cyan-200 drop-shadow-[0_0_16px_rgba(0,255,255,0.45)]">
+              🏆 {tournament.name}
+            </CardTitle>
+            <CardDescription className="text-gray-200/80">
+              Tournoi actif
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {data.map((entry, index) => {
+              let bgColor = "bg-white/5 border border-white/15"
+              let trophyIcon = null
+
+              if (index === 0) {
+                bgColor = "bg-yellow-400/15 border border-yellow-400/70 shadow-[0_0_18px_rgba(255,215,0,0.45)]"
+                trophyIcon = <Trophy className="mr-2 h-5 w-5 text-yellow-300" />
+              } else if (index === 1) {
+                bgColor = "bg-gray-300/10 border border-gray-300/60 shadow-[0_0_18px_rgba(192,192,192,0.35)]"
+                trophyIcon = <Trophy className="mr-2 h-5 w-5 text-gray-200" />
+              } else if (index === 2) {
+                bgColor = "bg-orange-400/15 border border-orange-400/70 shadow-[0_0_18px_rgba(255,140,0,0.35)]"
+                trophyIcon = <Trophy className="mr-2 h-5 w-5 text-orange-300" />
+              }
+
+              return (
+                <div
+                  key={entry.player_id}
+                  className={`flex items-center justify-between rounded-2xl px-5 py-4 font-mono text-white transition hover:-translate-y-1 ${bgColor}`}
+                >
+                  <span className="flex items-center text-sm font-semibold tracking-wide">
+                    {trophyIcon}
+                    {index + 1}. {entry.player_name}
+                  </span>
+                  <span className="text-base text-cyan-200">{entry.wins} victoires</span>
+                </div>
+              )
+            })}
+            {data.length === 0 && (
+              <div className="text-center text-gray-400 py-4">
+                Aucune donnée disponible
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      ))}
 
       <p className="text-center text-xs font-mono uppercase tracking-[0.35em] text-gray-400/80">
-        datastream :: {view}_leaderboard_active
+        datastream :: multi_leaderboard_active
       </p>
     </CyberPage>
   )
