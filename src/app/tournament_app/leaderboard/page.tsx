@@ -11,7 +11,7 @@ import {
   CardDescription,
 } from "@/components/ui/card"
 
-// Type definitions
+// Type definitions that match Supabase response structure
 interface Player {
   player_id: string
   player_name: string | null
@@ -24,7 +24,8 @@ interface Tournament {
   date: string
 }
 
-interface Match {
+// Match interface that matches the actual Supabase response structure
+interface MatchResponse {
   match_id: string
   player_id: string
   player2_id: string
@@ -38,9 +39,9 @@ interface Match {
   over_finishes2: number | null
   burst_finishes2: number | null
   xtreme_finishes2: number | null
-  players_matches_player_id_fkey: Player
-  players_matches_player2_id_fkey: Player
-  tournaments: Tournament | null
+  players_matches_player_id_fkey: Player[] // Supabase returns an array
+  players_matches_player2_id_fkey: Player[] // Supabase returns an array
+  tournaments: Tournament[] | null // Supabase returns an array or null
 }
 
 interface LeaderboardEntry {
@@ -111,9 +112,10 @@ async function calculateLeaderboard(options?: LeaderboardOptions): Promise<Leade
   // Calculate player statistics
   const playerStats = new Map<string, LeaderboardEntry>()
 
-  matches?.forEach((match: Match) => {
-    const player1 = match.players_matches_player_id_fkey
-    const player2 = match.players_matches_player2_id_fkey
+  matches?.forEach((match: MatchResponse) => {
+    // Extract players from the arrays returned by Supabase
+    const player1 = match.players_matches_player_id_fkey?.[0]
+    const player2 = match.players_matches_player2_id_fkey?.[0]
     
     if (!player1 || !player2) return
 
@@ -146,7 +148,7 @@ async function calculateLeaderboard(options?: LeaderboardOptions): Promise<Leade
 function updatePlayerStats(
   stats: Map<string, LeaderboardEntry>,
   player: Player,
-  match: Match,
+  match: MatchResponse,
   isWinner: boolean
 ): void {
   const existing = stats.get(player.player_id) || {
@@ -173,7 +175,7 @@ function updatePlayerStats(
   stats.set(player.player_id, existing)
 }
 
-function calculateMatchPoints(match: Match, isWinner: boolean): number {
+function calculateMatchPoints(match: MatchResponse, isWinner: boolean): number {
   let points = 0
 
   if (isWinner) {
