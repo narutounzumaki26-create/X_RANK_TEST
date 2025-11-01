@@ -11,37 +11,11 @@ import {
   CardDescription,
 } from "@/components/ui/card"
 
-// Type definitions that match Supabase response structure
+// Basic type definitions
 interface Player {
   player_id: string
   player_name: string | null
   player_region: string | null
-}
-
-interface Tournament {
-  tournament_id: string
-  name: string
-  date: string
-}
-
-// Match interface that matches the actual Supabase response structure
-interface MatchResponse {
-  match_id: string
-  player_id: string
-  player2_id: string
-  winner_id: string
-  tournament_id: string | null
-  spin_finishes: number | null
-  over_finishes: number | null
-  burst_finishes: number | null
-  xtreme_finishes: number | null
-  spin_finishes2: number | null
-  over_finishes2: number | null
-  burst_finishes2: number | null
-  xtreme_finishes2: number | null
-  players_matches_player_id_fkey: Player[] // Supabase returns an array
-  players_matches_player2_id_fkey: Player[] // Supabase returns an array
-  tournaments: Tournament[] | null // Supabase returns an array or null
 }
 
 interface LeaderboardEntry {
@@ -57,6 +31,16 @@ interface LeaderboardEntry {
 interface LeaderboardOptions {
   region?: string
   tournamentId?: string | null
+}
+
+// Type guard to check if an object has the required player properties
+function isValidPlayer(player: unknown): player is Player {
+  return (
+    typeof player === 'object' &&
+    player !== null &&
+    'player_id' in player &&
+    'player_name' in player
+  )
 }
 
 // Leaderboard calculation function
@@ -112,12 +96,21 @@ async function calculateLeaderboard(options?: LeaderboardOptions): Promise<Leade
   // Calculate player statistics
   const playerStats = new Map<string, LeaderboardEntry>()
 
-  matches?.forEach((match: MatchResponse) => {
-    // Extract players from the arrays returned by Supabase
-    const player1 = match.players_matches_player_id_fkey?.[0]
-    const player2 = match.players_matches_player2_id_fkey?.[0]
+  matches?.forEach((match) => {
+    // Safely extract players from the match data
+    const player1 = Array.isArray(match.players_matches_player_id_fkey) 
+      ? match.players_matches_player_id_fkey[0]
+      : match.players_matches_player_id_fkey
     
-    if (!player1 || !player2) return
+    const player2 = Array.isArray(match.players_matches_player2_id_fkey)
+      ? match.players_matches_player2_id_fkey[0]
+      : match.players_matches_player2_id_fkey
+
+    // Validate players
+    if (!isValidPlayer(player1) || !isValidPlayer(player2)) {
+      console.warn('Invalid player data in match:', match.match_id)
+      return
+    }
 
     // Apply regional filter if specified
     if (options?.region) {
@@ -148,7 +141,7 @@ async function calculateLeaderboard(options?: LeaderboardOptions): Promise<Leade
 function updatePlayerStats(
   stats: Map<string, LeaderboardEntry>,
   player: Player,
-  match: MatchResponse,
+  match: any, // Use any here for flexibility with Supabase response
   isWinner: boolean
 ): void {
   const existing = stats.get(player.player_id) || {
@@ -175,7 +168,7 @@ function updatePlayerStats(
   stats.set(player.player_id, existing)
 }
 
-function calculateMatchPoints(match: MatchResponse, isWinner: boolean): number {
+function calculateMatchPoints(match: any, isWinner: boolean): number {
   let points = 0
 
   if (isWinner) {
@@ -227,7 +220,7 @@ async function getRegions(): Promise<string[]> {
   return regions as string[]
 }
 
-async function getTournaments(): Promise<Tournament[]> {
+async function getTournaments(): Promise<Array<{tournament_id: string, name: string, date: string}>> {
   const supabase = await createSupabaseServerClient()
   const { data } = await supabase
     .from('tournaments')
@@ -309,118 +302,130 @@ function LeaderboardSection({
 }
 
 export default async function LeaderboardPage() {
-  // Load all leaderboards in parallel
-  const [globalLeaderboard, regions, tournaments] = await Promise.all([
-    calculateLeaderboard(), // Global leaderboard
-    getRegions(),
-    getTournaments()
-  ])
+  try {
+    // Load all leaderboards in parallel
+    const [globalLeaderboard, regions, tournaments] = await Promise.all([
+      calculateLeaderboard(), // Global leaderboard
+      getRegions(),
+      getTournaments()
+    ])
 
-  // Load regional leaderboards
-  const regionalLeaderboards = await Promise.all(
-    regions.map(region => calculateLeaderboard({ region }))
-  )
+    // Load regional leaderboards
+    const regionalLeaderboards = await Promise.all(
+      regions.map(region => calculateLeaderboard({ region }))
+    )
 
-  // Load tournament leaderboards
-  const tournamentLeaderboards = await Promise.all(
-    tournaments.map(tournament => calculateLeaderboard({ tournamentId: tournament.tournament_id }))
-  )
+    // Load tournament leaderboards
+    const tournamentLeaderboards = await Promise.all(
+      tournaments.map(tournament => calculateLeaderboard({ tournamentId: tournament.tournament_id }))
+    )
 
-  // Load official matches leaderboard
-  const officialMatchesLeaderboard = await calculateLeaderboard({ tournamentId: null })
+    // Load official matches leaderboard
+    const officialMatchesLeaderboard = await calculateLeaderboard({ tournamentId: null })
 
-  return (
-    <CyberPage
-      header={{
-        eyebrow: "datastream//multi_ranking",
-        title: "🏆 Multi-Leaderboards",
-        subtitle: "Classements par région, tournois et matchs officiels",
-        actions: <MainMenuButton />,
-      }}
-      contentClassName="mx-auto w-full max-w-6xl gap-8"
-    >
-      {/* Global Leaderboard */}
-      <div>
-        <h2 className="text-2xl font-bold text-cyan-300 mb-6 flex items-center gap-2">
-          <Globe className="h-6 w-6" />
-          Classement Global
-        </h2>
-        <LeaderboardSection
-          title="Champions Mondiaux"
-          subtitle="Les meilleurs joueurs toutes régions et tournois confondus"
-          icon={Globe}
-          data={globalLeaderboard.slice(0, 10)}
-        />
-      </div>
-
-      {/* Regional Leaderboards */}
-      <div>
-        <h2 className="text-2xl font-bold text-cyan-300 mb-6 flex items-center gap-2">
-          <MapPin className="h-6 w-6" />
-          Classements Régionaux
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {regionalLeaderboards.map((leaderboard, index) => {
-            const region = regions[index]
-            if (!leaderboard.length) return null
-            
-            return (
-              <LeaderboardSection
-                key={region}
-                title={`Champions ${region}`}
-                subtitle={`Top joueurs de la région ${region}`}
-                icon={MapPin}
-                data={leaderboard.slice(0, 5)}
-                emptyMessage={`Aucun match enregistré pour ${region}`}
-              />
-            )
-          })}
+    return (
+      <CyberPage
+        header={{
+          eyebrow: "datastream//multi_ranking",
+          title: "🏆 Multi-Leaderboards",
+          subtitle: "Classements par région, tournois et matchs officiels",
+          actions: <MainMenuButton />,
+        }}
+        contentClassName="mx-auto w-full max-w-6xl gap-8"
+      >
+        {/* Global Leaderboard */}
+        <div>
+          <h2 className="text-2xl font-bold text-cyan-300 mb-6 flex items-center gap-2">
+            <Globe className="h-6 w-6" />
+            Classement Global
+          </h2>
+          <LeaderboardSection
+            title="Champions Mondiaux"
+            subtitle="Les meilleurs joueurs toutes régions et tournois confondus"
+            icon={Globe}
+            data={globalLeaderboard.slice(0, 10)}
+          />
         </div>
-      </div>
 
-      {/* Tournament Leaderboards */}
-      <div>
-        <h2 className="text-2xl font-bold text-cyan-300 mb-6 flex items-center gap-2">
-          <Award className="h-6 w-6" />
-          Classements Tournois
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {tournamentLeaderboards.map((leaderboard, index) => {
-            const tournament = tournaments[index]
-            if (!leaderboard.length) return null
-            
-            return (
-              <LeaderboardSection
-                key={tournament.tournament_id}
-                title={tournament.name}
-                subtitle={`Tournoi du ${new Date(tournament.date).toLocaleDateString('fr-FR')}`}
-                icon={Award}
-                data={leaderboard.slice(0, 5)}
-                emptyMessage={`Aucun match pour ${tournament.name}`}
-              />
-            )
-          })}
+        {/* Regional Leaderboards */}
+        <div>
+          <h2 className="text-2xl font-bold text-cyan-300 mb-6 flex items-center gap-2">
+            <MapPin className="h-6 w-6" />
+            Classements Régionaux
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {regionalLeaderboards.map((leaderboard, index) => {
+              const region = regions[index]
+              if (!leaderboard.length) return null
+              
+              return (
+                <LeaderboardSection
+                  key={region}
+                  title={`Champions ${region}`}
+                  subtitle={`Top joueurs de la région ${region}`}
+                  icon={MapPin}
+                  data={leaderboard.slice(0, 5)}
+                  emptyMessage={`Aucun match enregistré pour ${region}`}
+                />
+              )
+            })}
+          </div>
         </div>
-      </div>
 
-      {/* Official Matches Leaderboard */}
-      <div>
-        <h2 className="text-2xl font-bold text-cyan-300 mb-6 flex items-center gap-2">
-          <Trophy className="h-6 w-6" />
-          Matchs Officiels
-        </h2>
-        <LeaderboardSection
-          title="Ligue Principale"
-          subtitle="Classement des matchs officiels (hors tournois)"
-          icon={Trophy}
-          data={officialMatchesLeaderboard.slice(0, 10)}
-          emptyMessage="Aucun match officiel enregistré"
-        />
-      </div>
+        {/* Tournament Leaderboards */}
+        <div>
+          <h2 className="text-2xl font-bold text-cyan-300 mb-6 flex items-center gap-2">
+            <Award className="h-6 w-6" />
+            Classements Tournois
+          </h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {tournamentLeaderboards.map((leaderboard, index) => {
+              const tournament = tournaments[index]
+              if (!leaderboard.length) return null
+              
+              return (
+                <LeaderboardSection
+                  key={tournament.tournament_id}
+                  title={tournament.name}
+                  subtitle={`Tournoi du ${new Date(tournament.date).toLocaleDateString('fr-FR')}`}
+                  icon={Award}
+                  data={leaderboard.slice(0, 5)}
+                  emptyMessage={`Aucun match pour ${tournament.name}`}
+                />
+              )
+            })}
+          </div>
+        </div>
 
-      <p className="text-center text-xs font-mono uppercase tracking-[0.35em] text-gray-400/80">
-        datastream :: multi_leaderboard_active
-      </p>
-    </CyberPage>
-  )
+        {/* Official Matches Leaderboard */}
+        <div>
+          <h2 className="text-2xl font-bold text-cyan-300 mb-6 flex items-center gap-2">
+            <Trophy className="h-6 w-6" />
+            Matchs Officiels
+          </h2>
+          <LeaderboardSection
+            title="Ligue Principale"
+            subtitle="Classement des matchs officiels (hors tournois)"
+            icon={Trophy}
+            data={officialMatchesLeaderboard.slice(0, 10)}
+            emptyMessage="Aucun match officiel enregistré"
+          />
+        </div>
+
+        <p className="text-center text-xs font-mono uppercase tracking-[0.35em] text-gray-400/80">
+          datastream :: multi_leaderboard_active
+        </p>
+      </CyberPage>
+    )
+  } catch (error) {
+    console.error('Error loading leaderboard page:', error)
+    return (
+      <CyberPage
+        centerContent
+        header={{ title: "Leaderboard", actions: <MainMenuButton /> }}
+      >
+        <p className="text-sm text-red-400">❌ Erreur lors du chargement du leaderboard</p>
+      </CyberPage>
+    )
+  }
 }
