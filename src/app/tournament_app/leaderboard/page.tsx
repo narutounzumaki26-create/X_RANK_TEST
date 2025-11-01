@@ -11,7 +11,49 @@ import {
   CardDescription,
 } from "@/components/ui/card"
 
-async function calculateLeaderboard(region?: string, tournamentId?: string | null) {
+// Type definitions
+interface Player {
+  player_id: string
+  player_name: string | null
+  player_region: string | null
+}
+
+interface Match {
+  match_id: string
+  player1_id: string
+  player2_id: string
+  winner_id: string
+  tournament_id: string | null
+  rounds: number
+  spin_finished: number | null
+  over_finished: number | null
+  burst_finished: number | null
+  xtreme_finished: number | null
+  spin_finished2: number | null
+  over_finished2: number | null
+  burst_finished2: number | null
+  xtreme_finished2: number | null
+  player1: Player[] | Player
+  player2: Player[] | Player
+}
+
+interface LeaderboardEntry {
+  player_id: string
+  player_name: string
+  player_region: string | null
+  total_score: number
+  wins: number
+  total_matches: number
+  win_rate: number
+}
+
+interface Tournament {
+  tournament_id: string
+  name: string
+  date: string
+}
+
+async function calculateLeaderboard(region?: string, tournamentId?: string | null): Promise<LeaderboardEntry[]> {
   const supabase = await createSupabaseServerClient()
 
   let query = supabase
@@ -46,11 +88,11 @@ async function calculateLeaderboard(region?: string, tournamentId?: string | nul
   const { data: matches, error } = await query
   if (error) throw error
 
-  const playerStats = new Map()
+  const playerStats = new Map<string, LeaderboardEntry>()
 
-  matches?.forEach((match: any) => {
-    const player1 = match.player1?.[0] || match.player1
-    const player2 = match.player2?.[0] || match.player2
+  matches?.forEach((match: Match) => {
+    const player1 = Array.isArray(match.player1) ? match.player1[0] : match.player1
+    const player2 = Array.isArray(match.player2) ? match.player2[0] : match.player2
 
     if (!player1 || !player2) return
 
@@ -62,16 +104,21 @@ async function calculateLeaderboard(region?: string, tournamentId?: string | nul
     updatePlayerStats(playerStats, player2, match, match.winner_id === player2.player_id)
   })
 
-  const leaderboard = Array.from(playerStats.values()).map((entry: any) => ({
+  const leaderboard = Array.from(playerStats.values()).map((entry: LeaderboardEntry) => ({
     ...entry,
     win_rate: entry.total_matches > 0 ? (entry.wins / entry.total_matches) * 100 : 0
   }))
 
-  leaderboard.sort((a: any, b: any) => b.total_score - a.total_score)
+  leaderboard.sort((a: LeaderboardEntry, b: LeaderboardEntry) => b.total_score - a.total_score)
   return leaderboard
 }
 
-function updatePlayerStats(stats: any, player: any, match: any, isWinner: boolean) {
+function updatePlayerStats(
+  stats: Map<string, LeaderboardEntry>,
+  player: Player,
+  match: Match,
+  isWinner: boolean
+): void {
   const existing = stats.get(player.player_id) || {
     player_id: player.player_id,
     player_name: player.player_name || 'Unknown',
@@ -105,7 +152,7 @@ function updatePlayerStats(stats: any, player: any, match: any, isWinner: boolea
   stats.set(player.player_id, existing)
 }
 
-async function getRegions() {
+async function getRegions(): Promise<string[]> {
   const supabase = await createSupabaseServerClient()
   const { data } = await supabase
     .from('players')
@@ -117,7 +164,7 @@ async function getRegions() {
   return regions
 }
 
-async function getTournaments() {
+async function getTournaments(): Promise<Tournament[]> {
   const supabase = await createSupabaseServerClient()
   const { data } = await supabase
     .from('tournaments')
@@ -127,19 +174,21 @@ async function getTournaments() {
   return data || []
 }
 
+interface LeaderboardSectionProps {
+  title: string
+  subtitle: string
+  icon: React.ComponentType<{ className?: string }>
+  data: LeaderboardEntry[]
+  emptyMessage?: string
+}
+
 function LeaderboardSection({ 
   title, 
   subtitle, 
   icon: Icon, 
   data, 
   emptyMessage = "Aucune donnée disponible" 
-}: { 
-  title: string
-  subtitle: string
-  icon: any
-  data: any[]
-  emptyMessage?: string
-}) {
+}: LeaderboardSectionProps) {
   return (
     <Card className="border border-white/10 bg-black/70 shadow-[0_0_28px_rgba(0,255,255,0.25)]">
       <CardHeader className="pb-2 text-center">
@@ -152,7 +201,7 @@ function LeaderboardSection({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-3">
-        {data.length > 0 ? data.map((entry: any, index: number) => {
+        {data.length > 0 ? data.map((entry: LeaderboardEntry, index: number) => {
           let bgColor = "bg-white/5 border border-white/15"
           let trophyIcon = null
 
@@ -210,7 +259,7 @@ export default async function LeaderboardPage() {
     )
 
     const tournamentLeaderboards = await Promise.all(
-      tournaments.map((tournament: any) => calculateLeaderboard(undefined, tournament.tournament_id))
+      tournaments.map((tournament: Tournament) => calculateLeaderboard(undefined, tournament.tournament_id))
     )
 
     const officialMatchesLeaderboard = await calculateLeaderboard(undefined, null)
@@ -246,7 +295,7 @@ export default async function LeaderboardPage() {
             Classements Régionaux
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {regionalLeaderboards.map((leaderboard: any[], index: number) => {
+            {regionalLeaderboards.map((leaderboard: LeaderboardEntry[], index: number) => {
               const region = regions[index]
               if (!leaderboard.length) return null
               
@@ -271,7 +320,7 @@ export default async function LeaderboardPage() {
             Classements Tournois
           </h2>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {tournamentLeaderboards.map((leaderboard: any[], index: number) => {
+            {tournamentLeaderboards.map((leaderboard: LeaderboardEntry[], index: number) => {
               const tournament = tournaments[index]
               if (!leaderboard.length) return null
               
