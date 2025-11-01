@@ -14,7 +14,6 @@ import {
   CardDescription,
 } from "@/components/ui/card"
 
-
 type Player = {
   player_id: string
   player_name: string | null
@@ -159,7 +158,6 @@ export default function LeaderboardPage() {
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const createSupabaseBrowserClient = supabase
 
   // Fetch data on component mount
   useEffect(() => {
@@ -177,6 +175,10 @@ export default function LeaderboardPage() {
         if (playersResponse.error) throw new Error(playersResponse.error.message)
         if (matchesResponse.error) throw new Error(matchesResponse.error.message)
         if (tournamentsResponse.error) throw new Error(tournamentsResponse.error.message)
+
+        console.log("Players:", playersResponse.data)
+        console.log("Matches:", matchesResponse.data)
+        console.log("Tournaments:", tournamentsResponse.data)
 
         setPlayers(playersResponse.data || [])
         setMatches(matchesResponse.data || [])
@@ -229,19 +231,19 @@ export default function LeaderboardPage() {
     return leaderboard.filter(entry => entry.wins > 0).sort((a, b) => b.wins - a.wins)
   }
 
-  // Get regions and active tournaments
+  // Get regions and ALL tournaments (not just active)
   const regions = [...new Set(players.map(p => p.player_region).filter(Boolean))] as string[]
-  const activeTournaments = tournaments.filter(t => t.status === "active")
+  const allTournaments = tournaments // Show all tournaments, not just active ones
 
   // Auto-select first region/tournament when switching to those views
   useEffect(() => {
     if (activeBoard === "regional" && !selectedRegion && regions.length > 0) {
       setSelectedRegion(regions[0])
     }
-    if (activeBoard === "tournament" && !selectedTournament && activeTournaments.length > 0) {
-      setSelectedTournament(activeTournaments[0].tournament_id)
+    if (activeBoard === "tournament" && !selectedTournament && allTournaments.length > 0) {
+      setSelectedTournament(allTournaments[0].tournament_id)
     }
-  }, [activeBoard, selectedRegion, selectedTournament, regions, activeTournaments])
+  }, [activeBoard, selectedRegion, selectedTournament, regions, allTournaments])
 
   // Get current data based on active board
   let currentData: LeaderboardEntry[] = []
@@ -262,27 +264,27 @@ export default function LeaderboardPage() {
       break
     
     case "regional":
-      if (selectedRegion) {
+      if (selectedRegion && regions.length > 0) {
         currentData = getLeaderboardData({ region: selectedRegion })
         currentTitle = `📍 ${selectedRegion}`
         currentDescription = "Classement régional"
       } else {
         currentData = []
-        currentTitle = "📍 Sélectionnez une région"
-        currentDescription = "Choisissez une région dans la liste ci-dessous"
+        currentTitle = "📍 Régions"
+        currentDescription = regions.length === 0 ? "Aucune région disponible" : "Choisissez une région dans la liste ci-dessous"
       }
       break
     
     case "tournament":
-      if (selectedTournament) {
+      if (selectedTournament && allTournaments.length > 0) {
         currentData = getLeaderboardData({ tournamentId: selectedTournament })
-        const tournamentInfo = tournaments.find(t => t.tournament_id === selectedTournament)
+        const tournamentInfo = allTournaments.find(t => t.tournament_id === selectedTournament)
         currentTitle = `🏆 ${tournamentInfo?.name || "Tournoi"}`
-        currentDescription = "Classement du tournoi"
+        currentDescription = `Tournoi - ${tournamentInfo?.status || "Statut inconnu"}`
       } else {
         currentData = []
-        currentTitle = "🏆 Sélectionnez un tournoi"
-        currentDescription = "Choisissez un tournoi dans la liste ci-dessous"
+        currentTitle = "🏆 Tournois"
+        currentDescription = allTournaments.length === 0 ? "Aucun tournoi disponible" : "Choisissez un tournoi dans la liste ci-dessous"
       }
       break
   }
@@ -360,32 +362,40 @@ export default function LeaderboardPage() {
       {/* Sub-selection for Regional and Tournament */}
       {(activeBoard === "regional" || activeBoard === "tournament") && (
         <div className="flex flex-wrap gap-3 mb-6">
-          {activeBoard === "regional" && regions.map(region => (
-            <button
-              key={region}
-              onClick={() => setSelectedRegion(region)}
-              className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
-                selectedRegion === region
-                  ? "bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(0,255,255,0.3)]"
-                  : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
-              }`}
-            >
-              {region}
-            </button>
+          {activeBoard === "regional" && (regions.length > 0 ? (
+            regions.map(region => (
+              <button
+                key={region}
+                onClick={() => setSelectedRegion(region)}
+                className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
+                  selectedRegion === region
+                    ? "bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(0,255,255,0.3)]"
+                    : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
+                }`}
+              >
+                {region}
+              </button>
+            ))
+          ) : (
+            <p className="text-gray-400 text-sm">Aucune région disponible</p>
           ))}
           
-          {activeBoard === "tournament" && activeTournaments.map(tournament => (
-            <button
-              key={tournament.tournament_id}
-              onClick={() => setSelectedTournament(tournament.tournament_id)}
-              className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
-                selectedTournament === tournament.tournament_id
-                  ? "bg-purple-500/20 border-purple-400 text-purple-200 shadow-[0_0_15px_rgba(192,132,252,0.3)]"
-                  : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
-              }`}
-            >
-              {tournament.name}
-            </button>
+          {activeBoard === "tournament" && (allTournaments.length > 0 ? (
+            allTournaments.map(tournament => (
+              <button
+                key={tournament.tournament_id}
+                onClick={() => setSelectedTournament(tournament.tournament_id)}
+                className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
+                  selectedTournament === tournament.tournament_id
+                    ? "bg-purple-500/20 border-purple-400 text-purple-200 shadow-[0_0_15px_rgba(192,132,252,0.3)]"
+                    : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
+                }`}
+              >
+                {tournament.name} ({tournament.status})
+              </button>
+            ))
+          ) : (
+            <p className="text-gray-400 text-sm">Aucun tournoi disponible</p>
           ))}
         </div>
       )}
