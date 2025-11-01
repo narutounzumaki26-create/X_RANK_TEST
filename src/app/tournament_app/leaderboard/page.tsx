@@ -3,7 +3,7 @@
 
 import { useState, useEffect } from "react"
 import { supabase } from "@/lib/supabaseClient"
-import { Trophy, Globe, MapPin, Sword, Users } from "lucide-react"
+import { Trophy, Globe, MapPin, Sword, Users, X, Calendar, Target, Award, Map } from "lucide-react"
 import { CyberPage } from "@/components/layout/CyberPage"
 import { MainMenuButton } from "@/components/navigation/MainMenuButton"
 import {
@@ -18,6 +18,9 @@ type Player = {
   player_id: string
   player_name: string | null
   player_region: string | null
+  player_birth_date?: string | null
+  player_first_name?: string | null
+  player_list_name?: string | null
 }
 
 type Match = {
@@ -26,12 +29,23 @@ type Match = {
   player1_id: string
   player2_id: string
   winner_id: string
+  rounds: number | null
+  spin_finishes: number | null
+  over_finishes: number | null
+  burst_finishes: number | null
+  xterms_finishes: number | null
+  spin_finishes2: number | null
+  over_finishes2: number | null
+  burst_finishes2: number | null
+  xterms_finishes2: number | null
 }
 
 type Tournament = {
   tournament_id: string
   name: string
   status: string
+  date: string
+  location: string | null
 }
 
 type TournamentParticipant = {
@@ -47,6 +61,23 @@ type LeaderboardEntry = {
   wins: number
   region: string
   placement?: number
+}
+
+type PlayerStats = {
+  total_matches: number
+  total_wins: number
+  total_losses: number
+  win_rate: number
+  total_rounds: number
+  avg_rounds_per_match: number
+  total_finishes: number
+  spin_finishes: number
+  over_finishes: number
+  burst_finishes: number
+  xterms_finishes: number
+  tournaments_played: number
+  best_placement: number | null
+  regions_played: string[]
 }
 
 type LeaderboardType = "global" | "official" | "regional" | "tournament"
@@ -93,8 +124,183 @@ function SelectionWindow({
   )
 }
 
+// Player Stats Modal Component
+function PlayerStatsModal({ 
+  player, 
+  stats, 
+  onClose 
+}: { 
+  player: Player
+  stats: PlayerStats
+  onClose: () => void 
+}) {
+  return (
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-gray-900 border border-cyan-500/30 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto shadow-2xl">
+        {/* Header */}
+        <div className="bg-gradient-to-r from-cyan-900/50 to-purple-900/50 p-6 border-b border-cyan-500/30">
+          <div className="flex justify-between items-start">
+            <div>
+              <h2 className="text-2xl font-bold text-cyan-200 mb-2">
+                {player.player_name}
+              </h2>
+              <div className="flex flex-wrap gap-4 text-sm text-gray-300">
+                {player.player_region && (
+                  <div className="flex items-center gap-1">
+                    <Map className="h-4 w-4" />
+                    <span>{player.player_region}</span>
+                  </div>
+                )}
+                {player.player_birth_date && (
+                  <div className="flex items-center gap-1">
+                    <Calendar className="h-4 w-4" />
+                    <span>{new Date(player.player_birth_date).toLocaleDateString()}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+            <button
+              onClick={onClose}
+              className="text-gray-400 hover:text-white transition-colors p-2 hover:bg-white/10 rounded-lg"
+            >
+              <X className="h-6 w-6" />
+            </button>
+          </div>
+        </div>
+
+        {/* Stats Grid */}
+        <div className="p-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Match Stats */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-cyan-300 border-b border-cyan-500/30 pb-2">
+                Statistiques des Matchs
+              </h3>
+              
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div className="text-cyan-200 text-sm">Matchs Totaux</div>
+                  <div className="text-2xl font-bold text-white">{stats.total_matches}</div>
+                </div>
+                
+                <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div className="text-cyan-200 text-sm">Victoires</div>
+                  <div className="text-2xl font-bold text-green-400">{stats.total_wins}</div>
+                </div>
+                
+                <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div className="text-cyan-200 text-sm">Défaites</div>
+                  <div className="text-2xl font-bold text-red-400">{stats.total_losses}</div>
+                </div>
+                
+                <div className="bg-white/5 rounded-lg p-3 border border-white/10">
+                  <div className="text-cyan-200 text-sm">Taux de Victoire</div>
+                  <div className="text-2xl font-bold text-yellow-400">{stats.win_rate}%</div>
+                </div>
+              </div>
+
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                <div className="flex items-center gap-2 mb-2">
+                  <Target className="h-4 w-4 text-cyan-300" />
+                  <span className="text-cyan-200 font-semibold">Rounds</span>
+                </div>
+                <div className="text-sm text-gray-300">
+                  Total: <span className="text-white font-semibold">{stats.total_rounds}</span>
+                </div>
+                <div className="text-sm text-gray-300">
+                  Moyenne/Match: <span className="text-white font-semibold">{stats.avg_rounds_per_match}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Tournament & Finishes Stats */}
+            <div className="space-y-4">
+              <h3 className="text-lg font-semibold text-purple-300 border-b border-purple-500/30 pb-2">
+                Tournois & Finitions
+              </h3>
+
+              {/* Tournament Stats */}
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                <div className="flex items-center gap-2 mb-2">
+                  <Award className="h-4 w-4 text-purple-300" />
+                  <span className="text-purple-200 font-semibold">Tournois</span>
+                </div>
+                <div className="text-sm text-gray-300">
+                  Participations: <span className="text-white font-semibold">{stats.tournaments_played}</span>
+                </div>
+                {stats.best_placement && (
+                  <div className="text-sm text-gray-300">
+                    Meilleur placement: <span className="text-yellow-400 font-semibold">#{stats.best_placement}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Finish Stats */}
+              <div className="bg-white/5 rounded-lg p-4 border border-white/10">
+                <div className="text-cyan-200 font-semibold mb-2">Types de Finitions</div>
+                <div className="space-y-1 text-sm">
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Spin:</span>
+                    <span className="text-white font-semibold">{stats.spin_finishes}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Over:</span>
+                    <span className="text-white font-semibold">{stats.over_finishes}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">Burst:</span>
+                    <span className="text-white font-semibold">{stats.burst_finishes}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-gray-300">X-Terms:</span>
+                    <span className="text-white font-semibold">{stats.xterms_finishes}</span>
+                  </div>
+                  <div className="border-t border-white/10 pt-1 mt-1">
+                    <div className="flex justify-between font-semibold">
+                      <span className="text-cyan-300">Total:</span>
+                      <span className="text-cyan-300">{stats.total_finishes}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Regions Played */}
+          {stats.regions_played.length > 0 && (
+            <div className="mt-6 bg-white/5 rounded-lg p-4 border border-white/10">
+              <div className="flex items-center gap-2 mb-3">
+                <Map className="h-4 w-4 text-green-400" />
+                <span className="text-green-200 font-semibold">Régions Jouées</span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {stats.regions_played.map(region => (
+                  <span 
+                    key={region}
+                    className="px-3 py-1 bg-green-500/20 border border-green-400/50 rounded-full text-green-300 text-sm"
+                  >
+                    {region}
+                  </span>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 // Leaderboard Row Component
-function LeaderboardRow({ entry, index }: { entry: LeaderboardEntry; index: number }) {
+function LeaderboardRow({ 
+  entry, 
+  index, 
+  onPlayerClick 
+}: { 
+  entry: LeaderboardEntry
+  index: number
+  onPlayerClick: (playerId: string) => void
+}) {
   let bgColor = "bg-white/5 border border-white/15"
   let trophyIcon = null
 
@@ -111,7 +317,8 @@ function LeaderboardRow({ entry, index }: { entry: LeaderboardEntry; index: numb
 
   return (
     <div
-      className={`flex items-center justify-between rounded-2xl px-5 py-4 font-mono text-white transition hover:-translate-y-1 ${bgColor}`}
+      className={`flex items-center justify-between rounded-2xl px-5 py-4 font-mono text-white transition hover:-translate-y-1 cursor-pointer ${bgColor}`}
+      onClick={() => onPlayerClick(entry.player_id)}
     >
       <span className="flex items-center text-sm font-semibold tracking-wide">
         {trophyIcon}
@@ -133,11 +340,13 @@ function LeaderboardRow({ entry, index }: { entry: LeaderboardEntry; index: numb
 function LeaderboardCard({ 
   title, 
   description, 
-  data 
+  data,
+  onPlayerClick
 }: { 
   title: string
   description: string
   data: LeaderboardEntry[]
+  onPlayerClick: (playerId: string) => void
 }) {
   return (
     <Card className="border border-white/10 bg-black/70 shadow-[0_0_28px_rgba(0,255,255,0.25)]">
@@ -151,7 +360,12 @@ function LeaderboardCard({
       </CardHeader>
       <CardContent className="space-y-3">
         {data.map((entry, index) => (
-          <LeaderboardRow key={entry.player_id} entry={entry} index={index} />
+          <LeaderboardRow 
+            key={entry.player_id} 
+            entry={entry} 
+            index={index}
+            onPlayerClick={onPlayerClick}
+          />
         ))}
         {data.length === 0 && (
           <div className="text-center text-gray-400 py-8">
@@ -172,6 +386,8 @@ export default function LeaderboardPage() {
   const [matches, setMatches] = useState<Match[]>([])
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [tournamentParticipants, setTournamentParticipants] = useState<TournamentParticipant[]>([])
+  const [selectedPlayer, setSelectedPlayer] = useState<Player | null>(null)
+  const [playerStats, setPlayerStats] = useState<PlayerStats | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -188,9 +404,9 @@ export default function LeaderboardPage() {
           tournamentsResponse,
           participantsResponse
         ] = await Promise.all([
-          supabase.from("players").select("player_id, player_name, player_region"),
-          supabase.from("matches").select("match_id, tournament_id, player1_id, player2_id, winner_id"),
-          supabase.from("tournaments").select("tournament_id, name, status"),
+          supabase.from("players").select("player_id, player_name, player_region, player_birth_date, player_first_name, player_list_name"),
+          supabase.from("matches").select("match_id, tournament_id, player1_id, player2_id, winner_id, rounds, spin_finishes, over_finishes, burst_finishes, xterms_finishes, spin_finishes2, over_finishes2, burst_finishes2, xterms_finishes2"),
+          supabase.from("tournaments").select("tournament_id, name, status, date, location"),
           supabase.from("tournament_participants").select("tournament_id, player_id, is_validated, placement")
         ])
 
@@ -213,6 +429,81 @@ export default function LeaderboardPage() {
 
     fetchData()
   }, [])
+
+  // Calculate player stats
+  function calculatePlayerStats(playerId: string): PlayerStats {
+    const playerMatches = matches.filter(match => 
+      match.player1_id === playerId || match.player2_id === playerId
+    )
+
+    const wins = playerMatches.filter(match => match.winner_id === playerId).length
+    const losses = playerMatches.length - wins
+    const winRate = playerMatches.length > 0 ? Math.round((wins / playerMatches.length) * 100) : 0
+
+    // Calculate rounds
+    const totalRounds = playerMatches.reduce((sum, match) => sum + (match.rounds || 0), 0)
+    const avgRounds = playerMatches.length > 0 ? Math.round(totalRounds / playerMatches.length) : 0
+
+    // Calculate finishes
+    let spinFinishes = 0
+    let overFinishes = 0
+    let burstFinishes = 0
+    let xtermsFinishes = 0
+
+    playerMatches.forEach(match => {
+      if (match.winner_id === playerId) {
+        // Player won - count their finishes
+        const isPlayer1 = match.player1_id === playerId
+        spinFinishes += isPlayer1 ? (match.spin_finishes || 0) : (match.spin_finishes2 || 0)
+        overFinishes += isPlayer1 ? (match.over_finishes || 0) : (match.over_finishes2 || 0)
+        burstFinishes += isPlayer1 ? (match.burst_finishes || 0) : (match.burst_finishes2 || 0)
+        xtermsFinishes += isPlayer1 ? (match.xterms_finishes || 0) : (match.xterms_finishes2 || 0)
+      }
+    })
+
+    const totalFinishes = spinFinishes + overFinishes + burstFinishes + xtermsFinishes
+
+    // Tournament stats
+    const playerTournaments = tournamentParticipants.filter(p => p.player_id === playerId && p.is_validated)
+    const bestPlacement = playerTournaments.length > 0 
+      ? Math.min(...playerTournaments.map(p => p.placement || Infinity))
+      : null
+
+    // Regions played
+    const regionsPlayed = [...new Set(
+      playerMatches.flatMap(match => {
+        const opponentId = match.player1_id === playerId ? match.player2_id : match.player1_id
+        const opponent = players.find(p => p.player_id === opponentId)
+        return opponent?.player_region ? [opponent.player_region] : []
+      })
+    )]
+
+    return {
+      total_matches: playerMatches.length,
+      total_wins: wins,
+      total_losses: losses,
+      win_rate: winRate,
+      total_rounds: totalRounds,
+      avg_rounds_per_match: avgRounds,
+      total_finishes: totalFinishes,
+      spin_finishes: spinFinishes,
+      over_finishes: overFinishes,
+      burst_finishes: burstFinishes,
+      xterms_finishes: xtermsFinishes,
+      tournaments_played: playerTournaments.length,
+      best_placement: bestPlacement === Infinity ? null : bestPlacement,
+      regions_played: regionsPlayed
+    }
+  }
+
+  // Handle player click
+  const handlePlayerClick = (playerId: string) => {
+    const player = players.find(p => p.player_id === playerId)
+    if (player) {
+      setSelectedPlayer(player)
+      setPlayerStats(calculatePlayerStats(playerId))
+    }
+  }
 
   // Calculate leaderboard data
   function getLeaderboardData(
@@ -260,13 +551,12 @@ export default function LeaderboardPage() {
         return {
           player_id: participant.player_id,
           player_name: player?.player_name ?? "Inconnu",
-          wins: 0, // No wins data from participants table
+          wins: 0,
           region: player?.player_region ?? "Unknown",
           placement: participant.placement || undefined
         }
       })
       .sort((a, b) => {
-        // Sort by placement if available, otherwise by name
         if (a.placement && b.placement) {
           return a.placement - b.placement
         }
@@ -322,17 +612,14 @@ export default function LeaderboardPage() {
     
     case "tournament":
       if (selectedTournament) {
-        // First try to get match-based leaderboard
         const matchData = getLeaderboardData({ tournamentId: selectedTournament })
         
         if (matchData.length > 0) {
-          // If there are matches, show match results
           currentData = matchData
           const tournamentInfo = allTournaments.find(t => t.tournament_id === selectedTournament)
           currentTitle = `🏆 ${tournamentInfo?.name || "Tournoi"}`
           currentDescription = "Classement basé sur les matchs joués"
         } else {
-          // If no matches, show tournament participants
           currentData = getTournamentParticipants(selectedTournament)
           const tournamentInfo = allTournaments.find(t => t.tournament_id === selectedTournament)
           currentTitle = `🏆 ${tournamentInfo?.name || "Tournoi"}`
@@ -374,93 +661,108 @@ export default function LeaderboardPage() {
   }
 
   return (
-    <CyberPage
-      header={{
-        eyebrow: "datastream//ranking",
-        title: "🏆 Multi-Leaderboards",
-        subtitle: "Sélectionnez une catégorie pour afficher le classement",
-        actions: <MainMenuButton />,
-      }}
-      contentClassName="mx-auto w-full max-w-4xl gap-6"
-    >
-      {/* Selection Grid */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        <SelectionWindow
-          icon={<Globe className="h-5 w-5" />}
-          title="Global"
-          description="Tous les matchs"
-          isActive={activeBoard === "global"}
-          onClick={() => setActiveBoard("global")}
-        />
-        
-        <SelectionWindow
-          icon={<Sword className="h-5 w-5" />}
-          title="Officiels"
-          description="Hors tournoi"
-          isActive={activeBoard === "official"}
-          onClick={() => setActiveBoard("official")}
-        />
-        
-        <SelectionWindow
-          icon={<MapPin className="h-5 w-5" />}
-          title="Régional"
-          description="Par région"
-          isActive={activeBoard === "regional"}
-          onClick={() => setActiveBoard("regional")}
-        />
-        
-        <SelectionWindow
-          icon={<Trophy className="h-5 w-5" />}
-          title="Tournois"
-          description="Compétitions"
-          isActive={activeBoard === "tournament"}
-          onClick={() => setActiveBoard("tournament")}
-        />
-      </div>
-
-      {/* Sub-selection for Regional and Tournament */}
-      {(activeBoard === "regional" || activeBoard === "tournament") && (
-        <div className="flex flex-wrap gap-3 mb-6">
-          {activeBoard === "regional" && regions.map(region => (
-            <button
-              key={region}
-              onClick={() => setSelectedRegion(region)}
-              className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
-                selectedRegion === region
-                  ? "bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(0,255,255,0.3)]"
-                  : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
-              }`}
-            >
-              {region}
-            </button>
-          ))}
+    <>
+      <CyberPage
+        header={{
+          eyebrow: "datastream//ranking",
+          title: "🏆 Multi-Leaderboards",
+          subtitle: "Sélectionnez une catégorie pour afficher le classement",
+          actions: <MainMenuButton />,
+        }}
+        contentClassName="mx-auto w-full max-w-4xl gap-6"
+      >
+        {/* Selection Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+          <SelectionWindow
+            icon={<Globe className="h-5 w-5" />}
+            title="Global"
+            description="Tous les matchs"
+            isActive={activeBoard === "global"}
+            onClick={() => setActiveBoard("global")}
+          />
           
-          {activeBoard === "tournament" && allTournaments.map(tournament => (
-            <button
-              key={tournament.tournament_id}
-              onClick={() => setSelectedTournament(tournament.tournament_id)}
-              className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
-                selectedTournament === tournament.tournament_id
-                  ? "bg-purple-500/20 border-purple-400 text-purple-200 shadow-[0_0_15px_rgba(192,132,252,0.3)]"
-                  : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
-              }`}
-            >
-              {tournament.name}
-            </button>
-          ))}
+          <SelectionWindow
+            icon={<Sword className="h-5 w-5" />}
+            title="Officiels"
+            description="Hors tournoi"
+            isActive={activeBoard === "official"}
+            onClick={() => setActiveBoard("official")}
+          />
+          
+          <SelectionWindow
+            icon={<MapPin className="h-5 w-5" />}
+            title="Régional"
+            description="Par région"
+            isActive={activeBoard === "regional"}
+            onClick={() => setActiveBoard("regional")}
+          />
+          
+          <SelectionWindow
+            icon={<Trophy className="h-5 w-5" />}
+            title="Tournois"
+            description="Compétitions"
+            isActive={activeBoard === "tournament"}
+            onClick={() => setActiveBoard("tournament")}
+          />
         </div>
+
+        {/* Sub-selection for Regional and Tournament */}
+        {(activeBoard === "regional" || activeBoard === "tournament") && (
+          <div className="flex flex-wrap gap-3 mb-6">
+            {activeBoard === "regional" && regions.map(region => (
+              <button
+                key={region}
+                onClick={() => setSelectedRegion(region)}
+                className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
+                  selectedRegion === region
+                    ? "bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(0,255,255,0.3)]"
+                    : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
+                }`}
+              >
+                {region}
+              </button>
+            ))}
+            
+            {activeBoard === "tournament" && allTournaments.map(tournament => (
+              <button
+                key={tournament.tournament_id}
+                onClick={() => setSelectedTournament(tournament.tournament_id)}
+                className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
+                  selectedTournament === tournament.tournament_id
+                    ? "bg-purple-500/20 border-purple-400 text-purple-200 shadow-[0_0_15px_rgba(192,132,252,0.3)]"
+                    : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
+                }`}
+              >
+                {tournament.name}
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Main Leaderboard Display */}
+        <LeaderboardCard
+          title={currentTitle}
+          description={currentDescription}
+          data={currentData}
+          onPlayerClick={handlePlayerClick}
+        />
+
+        <p className="text-center text-xs font-mono uppercase tracking-[0.35em] text-gray-400/80">
+          active_board: {activeBoard} | entries: {currentData.length}
+        </p>
+      </CyberPage>
+
+      {/* Player Stats Modal */}
+      {selectedPlayer && playerStats && (
+        <PlayerStatsModal
+          player={selectedPlayer}
+          stats={playerStats}
+          onClose={() => {
+            setSelectedPlayer(null)
+            setPlayerStats(null)
+          }}
+        />
       )}
-
-      {/* Main Leaderboard Display */}
-      <LeaderboardCard
-        title={currentTitle}
-        description={currentDescription}
-        data={currentData}
-      />
-
-      <p className="text-center text-xs font-mono uppercase tracking-[0.35em] text-gray-400/80">
-        active_board: {activeBoard} | entries: {currentData.length}
-      </p>
-    </CyberPage>
+    </>
   )
 }
