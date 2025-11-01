@@ -32,11 +32,11 @@ type Match = {
   spin_finishes: number | null
   over_finishes: number | null
   burst_finishes: number | null
-  xterms_finishes: number | null
+  xtreme_finishes: number | null
   spin_finishes2: number | null
   over_finishes2: number | null
   burst_finishes2: number | null
-  xterms_finishes2: number | null
+  xtreme_finishes2: number | null
 }
 
 type Tournament = {
@@ -73,7 +73,7 @@ type PlayerStats = {
   spin_finishes: number
   over_finishes: number
   burst_finishes: number
-  xterms_finishes: number
+  xtreme_finishes: number
   tournaments_played: number
   best_placement: number | null
   regions_played: string[]
@@ -251,8 +251,8 @@ function PlayerStatsModal({
                     <span className="text-white font-semibold">{stats.burst_finishes}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-300">X-Terms:</span>
-                    <span className="text-white font-semibold">{stats.xterms_finishes}</span>
+                    <span className="text-gray-300">Xtreme:</span>
+                    <span className="text-white font-semibold">{stats.xtreme_finishes}</span>
                   </div>
                   <div className="border-t border-white/10 pt-1 mt-1">
                     <div className="flex justify-between font-semibold">
@@ -404,7 +404,7 @@ export default function LeaderboardPage() {
           participantsResponse
         ] = await Promise.all([
           supabase.from("players").select("player_id, player_name, player_region, player_birth_date, player_first_name"),
-          supabase.from("matches").select("match_id, tournament_id, player1_id, player2_id, winner_id, rounds, spin_finishes, over_finishes, burst_finishes, xterms_finishes, spin_finishes2, over_finishes2, burst_finishes2, xterms_finishes2"),
+          supabase.from("matches").select("match_id, tournament_id, player1_id, player2_id, winner_id, rounds, spin_finishes, over_finishes, burst_finishes, xtreme_finishes, spin_finishes2, over_finishes2, burst_finishes2, xtreme_finishes2"),
           supabase.from("tournaments").select("tournament_id, name, status, date, location"),
           supabase.from("tournament_participants").select("tournament_id, player_id, is_validated, placement")
         ])
@@ -447,7 +447,7 @@ export default function LeaderboardPage() {
     let spinFinishes = 0
     let overFinishes = 0
     let burstFinishes = 0
-    let xtermsFinishes = 0
+    let xtremeFinishes = 0
 
     playerMatches.forEach(match => {
       if (match.winner_id === playerId) {
@@ -456,11 +456,11 @@ export default function LeaderboardPage() {
         spinFinishes += isPlayer1 ? (match.spin_finishes || 0) : (match.spin_finishes2 || 0)
         overFinishes += isPlayer1 ? (match.over_finishes || 0) : (match.over_finishes2 || 0)
         burstFinishes += isPlayer1 ? (match.burst_finishes || 0) : (match.burst_finishes2 || 0)
-        xtermsFinishes += isPlayer1 ? (match.xterms_finishes || 0) : (match.xterms_finishes2 || 0)
+        xtremeFinishes += isPlayer1 ? (match.xtreme_finishes || 0) : (match.xtreme_finishes2 || 0)
       }
     })
 
-    const totalFinishes = spinFinishes + overFinishes + burstFinishes + xtermsFinishes
+    const totalFinishes = spinFinishes + overFinishes + burstFinishes + xtremeFinishes
 
     // Tournament stats
     const playerTournaments = tournamentParticipants.filter(p => p.player_id === playerId && p.is_validated)
@@ -488,7 +488,7 @@ export default function LeaderboardPage() {
       spin_finishes: spinFinishes,
       over_finishes: overFinishes,
       burst_finishes: burstFinishes,
-      xterms_finishes: xtermsFinishes,
+      xtreme_finishes: xtremeFinishes,
       tournaments_played: playerTournaments.length,
       best_placement: bestPlacement === Infinity ? null : bestPlacement,
       regions_played: regionsPlayed
