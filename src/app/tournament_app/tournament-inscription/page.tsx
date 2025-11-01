@@ -162,7 +162,7 @@ export default function TournamentInscriptionPage() {
     if (details && targetPlayerId) {
       // Check if player is already registered for this tournament
       const { data: participantData } = await supabase
-        .from("tournament_participants")
+        .from("tournament_participants") // CORRIGÉ
         .select("*")
         .eq("player_id", targetPlayerId)
         .eq("tournament_id", tournamentId)
@@ -321,7 +321,7 @@ export default function TournamentInscriptionPage() {
 
   const handleSubmit = async () => {
     if (!targetPlayerId || !selectedTournament) {
-      alert("Erreur d&apos;authentification ou tournoi non sélectionné !");
+      alert("Erreur d'authentification ou tournoi non sélectionné !");
       return;
     }
 
@@ -420,7 +420,7 @@ export default function TournamentInscriptionPage() {
         if (deckError) throw deckError;
 
         const { error: participantError } = await supabase
-          .from("tournament_participants")
+          .from("tournament_participants") // CORRIGÉ
           .insert({
             player_id: targetPlayerId,
             tournament_id: selectedTournament,
@@ -443,7 +443,7 @@ export default function TournamentInscriptionPage() {
         alert(`Erreur : ${err.message}`);
       } else {
         console.error(err);
-        alert("Erreur lors de l&apos;inscription.");
+        alert("Erreur lors de l'inscription.");
       }
     }
   };
@@ -455,7 +455,7 @@ export default function TournamentInscriptionPage() {
       try {
         // Delete participant using composite key (tournament_id + player_id)
         const { error: participantError } = await supabase
-          .from("tournament_participants")
+          .from("tournament_participants") // CORRIGÉ
           .delete()
           .eq("player_id", targetPlayerId)
           .eq("tournament_id", selectedTournament);
@@ -480,8 +480,8 @@ export default function TournamentInscriptionPage() {
         setSelectedComboCount(0);
         setBeys([]);
       } catch (err) {
-        console.error(err);
-        alert("Erreur lors de l&apos;annulation.");
+        console.error("Erreur détaillée:", err);
+        alert(`Erreur lors de l'annulation: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
       }
     }
   };
@@ -500,221 +500,401 @@ export default function TournamentInscriptionPage() {
   }
 
   return (
-    <div className="max-w-4xl mx-auto p-6 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white rounded-2xl shadow-2xl">
-      <div className="mb-6 flex justify-between items-center">
-        <div className="text-sm text-gray-300">
-          Connecté en tant que : <span className="font-semibold text-purple-300">{currentPlayer.player_name}</span>
-          {isAdmin && <span className="ml-2 px-2 py-1 bg-red-600 rounded text-xs">ADMIN</span>}
-        </div>
-        <MainMenuButton />
-      </div>
-      <h1 className="text-4xl font-extrabold mb-8 text-center tracking-wide text-purple-400">
-        🚀 Inscription Tournoi
-      </h1>
+  <div className="min-h-screen relative overflow-hidden text-white">
+    {/* === FOND : grand gradient blanc chromatique + petites orbes + accent vert === */}
+    <div
+      className="absolute inset-0 animate-gradient-shift pointer-events-none"
+      style={{
+        backgroundImage:
+          "linear-gradient(135deg,#ffffff,#f8fbff,#fff2fb,#f3fff7,#ffffff,#f8fbff,#fff2fb,#ffffff)",
+        backgroundSize: "450% 450%",
+      }}
+    />
 
-      {/* Admin Player Selection */}
-      {isAdmin && (
-        <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-red-500 shadow-lg">
-          <label className="block mb-3 font-semibold text-red-300">👑 Sélection du Joueur (Admin) :</label>
-          <Select onValueChange={setSelectedPlayer} value={selectedPlayer || undefined}>
-            <SelectTrigger className="bg-gray-900 border border-red-600">
-              <SelectValue placeholder="Choisir un joueur" />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-900 text-white">
-              {allPlayers.map(p => (
-                <SelectItem key={p.player_id} value={p.player_id}>
-                  {p.player_name} {p.Admin && "👑"}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="mt-2 text-sm text-red-200">
-            Mode Admin : Vous pouvez inscrire n&apos;importe quel joueur
-          </p>
-        </div>
-      )}
-
-      {/* Sélection du tournoi */}
-      <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-purple-500 shadow-lg">
-        <label className="block mb-3 font-semibold text-purple-300">🎯 Tournoi :</label>
-        <Select onValueChange={handleTournamentSelect} value={selectedTournament || undefined}>
-          <SelectTrigger className="bg-gray-900 border border-purple-600">
-            <SelectValue placeholder="Choisir un tournoi" />
-          </SelectTrigger>
-          <SelectContent className="bg-gray-900 text-white">
-            {tournaments.map(t => (
-              <SelectItem key={t.tournament_id} value={t.tournament_id}>
-                {t.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
-      {/* Récap tournoi */}
-      {tournamentDetails && (
-        <div className="mb-8 p-6 bg-gray-800/70 rounded-xl border border-blue-500 shadow-md">
-          <p><span className="font-bold text-blue-300">🏆 Nom :</span> {tournamentDetails.name}</p>
-          <p><span className="font-bold text-blue-300">📍 Lieu :</span> {tournamentDetails.location || "Non spécifié"}</p>
-          <p><span className="font-bold text-blue-300">📅 Date :</span> {new Date(tournamentDetails.date).toLocaleDateString()}</p>
-          <p><span className="font-bold text-blue-300">🔢 Combos maximum :</span> {tournamentDetails.max_combos}</p>
-          {existingParticipant && (
-            <div className="mt-3 p-3 bg-yellow-600/20 rounded-lg border border-yellow-500">
-              <p className="text-yellow-300 font-semibold">
-                ✅ {isAdmin ? "Le joueur est déjà inscrit" : "Vous êtes déjà inscrit"} à ce tournoi
-                {existingParticipant.is_validated && " (Validé)"}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Sélection du nombre de combos */}
-      {tournamentDetails && (
-        <div className="mb-8 p-6 rounded-xl bg-gray-800/70 border border-yellow-500 shadow-lg">
-          <label className="block mb-3 font-semibold text-yellow-300">🔢 Nombre de combos :</label>
-          <Select 
-            onValueChange={(value) => handleComboCountChange(parseInt(value))} 
-            value={selectedComboCount.toString()}
-            disabled={existingParticipant?.is_validated}
-          >
-            <SelectTrigger className="bg-gray-900 border border-yellow-600">
-              <SelectValue placeholder="Choisir le nombre de combos" />
-            </SelectTrigger>
-            <SelectContent className="bg-gray-900 text-white">
-              <SelectItem value="0">Sélectionner...</SelectItem>
-              {comboCountOptions.map(count => (
-                <SelectItem key={count} value={count.toString()}>
-                  {count} combo{count > 1 ? 's' : ''}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <p className="mt-2 text-sm text-yellow-200">
-            Choisissez entre 1 et {tournamentDetails.max_combos} combo(s) pour ce tournoi
-            {existingParticipant?.is_validated && (
-              <span className="block text-red-300 mt-1">
-                ⚠️ L&apos;inscription est validée, vous ne pouvez plus modifier le nombre de combos
-              </span>
-            )}
-          </p>
-        </div>
-      )}
-
-      {/* Beys - Only show if combo count is selected */}
-      {selectedComboCount > 0 && beys.slice(0, selectedComboCount).map((bey, index) => (
-        <div
-          key={`bey-${index}-${bey.existingComboId || 'new'}`}
-          className="mb-8 p-6 rounded-xl bg-gradient-to-r from-gray-700 to-gray-800 border border-pink-500 shadow-xl"
-        >
-          {/* Display auto-generated combo name */}
-          <div className="mb-4 p-3 bg-gray-900 rounded-lg border border-pink-600">
-            <p className="text-sm font-semibold text-pink-300 mb-1">Nom du Combo :</p>
-            <p className="text-white font-mono">{getCurrentComboName(bey, index)}</p>
-            {bey.existingComboId && (
-              <p className="text-xs text-green-400 mt-1">
-                ✨ Combo existant - Les modifications créeront un nouveau combo
-              </p>
-            )}
-          </div>
-
-          <p className="text-lg font-bold mb-4 text-pink-300">
-            🔥 Combo {index + 1} 
-            {bey.existingComboId && " (Existant)"}
-          </p>
-          
-          <div className="mb-4 flex items-center gap-2">
-            <label className="font-semibold">CX ?</label>
-            <input
-              type="checkbox"
-              checked={bey.cx}
-              onChange={e => handleBeyCxChange(index, e.target.checked)}
-              className="w-5 h-5 accent-pink-500"
-              disabled={existingParticipant?.is_validated}
-            />
-          </div>
-
-          <div className="grid grid-cols-1 gap-3">
-            {(bey.cx
-              ? [
-                  { key: "lockChip", options: lockChips, label: "Lock Chip" },
-                  { key: "blade", options: blades, label: "Blade" },
-                  { key: "assist", options: assists, label: "Assist" },
-                  { key: "ratchet", options: ratchets, label: "Ratchet" },
-                  { key: "bit", options: bits, label: "Bit" },
-                ]
-              : [
-                  { key: "blade", options: blades, label: "Blade" },
-                  { key: "ratchet", options: ratchets, label: "Ratchet" },
-                  { key: "bit", options: bits, label: "Bit" },
-                ]
-            ).map(({ key, options, label }) => {
-              const pieceKey = key as BeyPieceKey;
-              const selectedValue = bey[pieceKey] ?? "";
-
-              return (
-                <Select
-                  key={pieceKey}
-                  onValueChange={(v) => handleBeyPieceSelect(index, pieceKey, v)}
-                  value={selectedValue}
-                  disabled={existingParticipant?.is_validated}
-                >
-                  <SelectTrigger className="bg-gray-900 border border-pink-600">
-                    <SelectValue placeholder={label} />
-                  </SelectTrigger>
-                  <SelectContent className="bg-gray-900 text-white">
-                    {options.map(o => {
-                      const idKey =
-                        pieceKey === "lockChip"
-                          ? "lock_chip_id"
-                          : `${pieceKey}_id`;
-                      const optionValue = o[idKey as keyof typeof o] as string;
-                      return (
-                        <SelectItem key={optionValue} value={optionValue}>
-                          {o.name} {o.type ? `(${o.type})` : ""}
-                        </SelectItem>
-                      );
-                    })}
-                  </SelectContent>
-                </Select>
-              );
-            })}
-          </div>
-        </div>
-      ))}
-
-      <div className="flex gap-4">
-        {existingParticipant && (
-          <Button
-            onClick={handleCancelRegistration}
-            className="flex-1 py-3 text-lg font-bold bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg transition-all duration-200"
-            disabled={existingParticipant?.is_validated && !isAdmin}
-          >
-            ❌ {isAdmin ? "Annuler l&apos;inscription" : "Se désinscrire"}
-          </Button>
-        )}
-        
-        <Button
-          onClick={handleSubmit}
-          disabled={!selectedTournament || selectedComboCount === 0 || (existingParticipant?.is_validated && !isAdmin)}
-          className="flex-1 py-3 text-lg font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg transition-all duration-200 disabled:bg-gray-600 disabled:cursor-not-allowed"
-        >
-          {existingParticipant ? "💾 Modifier le Deck" : "⚡ S&apos;inscrire maintenant"}
-        </Button>
-      </div>
-
-      {existingParticipant?.is_validated && (
-        <div className="mt-4 p-4 bg-green-600/20 rounded-lg border border-green-500">
-          <p className="text-green-300 text-center">
-            ✅ L&apos;inscription est validée {!isAdmin && "et ne peut plus être modifiée"}
-          </p>
-          {isAdmin && (
-            <p className="text-yellow-300 text-center text-sm mt-1">
-              👑 Mode Admin : Vous pouvez toujours modifier cette inscription
-            </p>
-          )}
-        </div>
-      )}
+    {/* Orbes multiples (petites) qui pulsent */}
+    <div className="absolute inset-0 pointer-events-none">
+      <div
+        className="orb"
+        style={{
+          width: 90,
+          height: 90,
+          left: "8%",
+          top: "72%",
+          "--dur": "6.5s",
+          "--delay": "0s",
+          "--tx": "6px",
+          "--ty": "-4px",
+        } as React.CSSProperties & Record<"--dur" | "--delay" | "--tx" | "--ty", string | number>}
+      />
+      <div
+        className="orb"
+        style={{
+          width: 70,
+          height: 70,
+          left: "18%",
+          top: "30%",
+          "--dur": "7.8s",
+          "--delay": "1.2s",
+          "--tx": "-5px",
+          "--ty": "3px",
+        } as React.CSSProperties & Record<"--dur" | "--delay" | "--tx" | "--ty", string | number>}
+      />
+      <div
+        className="orb"
+        style={{
+          width: 110,
+          height: 110,
+          left: "32%",
+          top: "12%",
+          "--dur": "8.2s",
+          "--delay": "0.4s",
+          "--tx": "4px",
+          "--ty": "5px",
+        } as React.CSSProperties & Record<"--dur" | "--delay" | "--tx" | "--ty", string | number>}
+      />
+      <div
+        className="orb"
+        style={{
+          width: 80,
+          height: 80,
+          left: "56%",
+          top: "18%",
+          "--dur": "7.2s",
+          "--delay": "2s",
+          "--tx": "-3px",
+          "--ty": "-2px",
+        } as React.CSSProperties & Record<"--dur" | "--delay" | "--tx" | "--ty", string | number>}
+      />
+      <div
+        className="orb"
+        style={{
+          width: 65,
+          height: 65,
+          left: "68%",
+          top: "68%",
+          "--dur": "6.8s",
+          "--delay": "1.6s",
+          "--tx": "2px",
+          "--ty": "-3px",
+        } as React.CSSProperties & Record<"--dur" | "--delay" | "--tx" | "--ty", string | number>}
+      />
+      <div
+        className="orb"
+        style={{
+          width: 95,
+          height: 95,
+          left: "84%",
+          top: "26%",
+          "--dur": "7.6s",
+          "--delay": "0.8s",
+          "--tx": "-6px",
+          "--ty": "2px",
+        } as React.CSSProperties & Record<"--dur" | "--delay" | "--tx" | "--ty", string | number>}
+      />
+      <div
+        className="orb"
+        style={{
+          width: 75,
+          height: 75,
+          left: "42%",
+          top: "78%",
+          "--dur": "7.1s",
+          "--delay": "2.4s",
+          "--tx": "3px",
+          "--ty": "-2px",
+        } as React.CSSProperties & Record<"--dur" | "--delay" | "--tx" | "--ty", string | number>}
+      />
     </div>
-  );
+
+    {/* Accent vert subtil */}
+    <div
+      className="absolute inset-0 animate-pulse pointer-events-none"
+      style={{
+        background:
+          "radial-gradient(900px 900px at 20% 75%, rgba(16,185,129,0.16), transparent 55%), radial-gradient(800px 800px at 82% 18%, rgba(16,185,129,0.12), transparent 52%)",
+      }}
+    />
+
+    {/* Vignette pour lisibilité */}
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        background:
+          "radial-gradient(ellipse at center, rgba(0,0,0,0) 38%, rgba(0,0,0,.65) 100%)",
+      }}
+    />
+
+    {/* === CONTENU === */}
+    <div className="relative z-10 p-6">
+      <div className="max-w-6xl mx-auto">
+        {/* Header */}
+        <div className="flex justify-between items-center mb-8">
+          <h1 className="text-4xl font-bold text-white drop-shadow-[0_2px_0_#000]">
+            🚀 Inscription Tournoi
+          </h1>
+          <MainMenuButton />
+        </div>
+
+        {/* Infos joueur */}
+        {currentPlayer && (
+          <div className="bg-black/60 backdrop-blur-md rounded-xl p-6 mb-8 border border-black animate-float-slow hover-lift">
+            <h2 className="text-2xl font-bold mb-2 text-white drop-shadow-[0_1px_0_#000]">
+              👤 {currentPlayer.player_name}
+            </h2>
+            <p className="text-white/90 drop-shadow-[0_1px_0_#000]">
+              ID: <span className="font-mono">{currentPlayer.player_id}</span>
+              {isAdmin && (
+                <span className="ml-3 px-2 py-1 rounded bg-red-600/60 text-xs align-middle">
+                  ADMIN
+                </span>
+              )}
+            </p>
+            <p className="text-white/70 text-sm mt-2 drop-shadow-[0_1px_0_#000]">
+              Sélectionnez un tournoi puis construisez votre deck pour valider l'inscription.
+            </p>
+          </div>
+        )}
+
+        {/* Bloc Admin: choisir le joueur */}
+        {isAdmin && (
+          <div className="bg-black/60 backdrop-blur-md rounded-xl p-6 mb-8 border border-black animate-float-slow hover-lift">
+            <label className="block mb-3 font-semibold text-white/90 drop-shadow-[0_1px_0_#000]">
+              👑 Sélection du Joueur (Admin)
+            </label>
+            <Select onValueChange={setSelectedPlayer} value={selectedPlayer || undefined}>
+              <SelectTrigger className="bg-black/60 border border-emerald-500/40">
+                <SelectValue placeholder="Choisir un joueur" />
+              </SelectTrigger>
+              <SelectContent className="bg-black text-white">
+                {allPlayers.map((p) => (
+                  <SelectItem key={p.player_id} value={p.player_id}>
+                    {p.player_name} {p.Admin && "👑"}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-2 text-sm text-white/70 drop-shadow-[0_1px_0_#000]">
+              Vous pouvez inscrire n'importe quel joueur.
+            </p>
+          </div>
+        )}
+
+        {/* Sélection Tournoi */}
+        <div className="bg-black/60 backdrop-blur-md rounded-xl p-6 mb-8 border border-black animate-float-slow hover-lift">
+          <label className="block mb-3 font-semibold text-white/90 drop-shadow-[0_1px_0_#000]">
+            🎯 Tournoi
+          </label>
+          <Select onValueChange={handleTournamentSelect} value={selectedTournament || undefined}>
+            <SelectTrigger className="bg-black/60 border border-emerald-500/40">
+              <SelectValue placeholder="Choisir un tournoi" />
+            </SelectTrigger>
+            <SelectContent className="bg-black text-white">
+              {tournaments.map((t) => (
+                <SelectItem key={t.tournament_id} value={t.tournament_id}>
+                  {t.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+
+        {/* Récap tournoi */}
+        {tournamentDetails && (
+          <div className="bg-black/60 backdrop-blur-md rounded-xl p-6 mb-8 border border-black animate-float-slow hover-lift">
+            <h3 className="text-2xl font-bold mb-4 text-white drop-shadow-[0_2px_0_#000]">
+              🏆 Détails du Tournoi
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+              <div className="rounded-lg bg-black/50 border border-black p-4 text-center">
+                <div className="text-xs uppercase tracking-wide text-white/70 drop-shadow-[0_1px_0_#000]">
+                  Nom
+                </div>
+                <div className="text-lg font-semibold text-white drop-shadow-[0_1px_0_#000]">
+                  {tournamentDetails.name}
+                </div>
+              </div>
+              <div className="rounded-lg bg-black/50 border border-black p-4 text-center">
+                <div className="text-xs uppercase tracking-wide text-white/70 drop-shadow-[0_1px_0_#000]">
+                  Lieu
+                </div>
+                <div className="text-lg font-semibold text-white drop-shadow-[0_1px_0_#000]">
+                  {tournamentDetails.location || "Non spécifié"}
+                </div>
+              </div>
+              <div className="rounded-lg bg-black/50 border border-black p-4 text-center">
+                <div className="text-xs uppercase tracking-wide text-white/70 drop-shadow-[0_1px_0_#000]">
+                  Date
+                </div>
+                <div className="text-lg font-semibold text-white drop-shadow-[0_1px_0_#000]">
+                  {new Date(tournamentDetails.date).toLocaleDateString()}
+                </div>
+              </div>
+              <div className="rounded-lg bg-black/50 border border-black p-4 text-center">
+                <div className="text-xs uppercase tracking-wide text-white/70 drop-shadow-[0_1px_0_#000]">
+                  Combos max
+                </div>
+                <div className="text-lg font-semibold text-emerald-300 drop-shadow-[0_1px_0_#000]">
+                  {tournamentDetails.max_combos}
+                </div>
+              </div>
+            </div>
+            {existingParticipant && (
+              <div className="mt-4 p-4 rounded-lg border border-yellow-500/50 bg-yellow-500/10">
+                <p className="text-yellow-300 font-semibold drop-shadow-[0_1px_0_#000]">
+                  ✅ {isAdmin ? "Le joueur est déjà inscrit" : "Vous êtes déjà inscrit"}
+                  {existingParticipant.is_validated && " (Validé)"}
+                </p>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Nombre de combos */}
+        {tournamentDetails && (
+          <div className="bg-black/60 backdrop-blur-md rounded-xl p-6 mb-8 border border-black animate-float-slow hover-lift">
+            <label className="block mb-3 font-semibold text-white/90 drop-shadow-[0_1px_0_#000]">
+              🔢 Nombre de combos
+            </label>
+            <Select
+              onValueChange={(v) => handleComboCountChange(parseInt(v))}
+              value={selectedComboCount.toString()}
+              disabled={existingParticipant?.is_validated}
+            >
+              <SelectTrigger className="bg-black/60 border border-emerald-500/40">
+                <SelectValue placeholder="Choisir le nombre de combos" />
+              </SelectTrigger>
+              <SelectContent className="bg-black text-white">
+                <SelectItem value="0">Sélectionner…</SelectItem>
+                {comboCountOptions.map((count) => (
+                  <SelectItem key={count} value={count.toString()}>
+                    {count} combo{count > 1 ? "s" : ""}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <p className="mt-2 text-sm text-white/70 drop-shadow-[0_1px_0_#000]">
+              Choisissez entre 1 et {tournamentDetails.max_combos} combo(s) pour ce tournoi
+              {existingParticipant?.is_validated && (
+                <span className="block text-red-300 mt-1">
+                  ⚠️ L'inscription est validée, vous ne pouvez plus modifier le nombre de combos
+                </span>
+              )}
+            </p>
+          </div>
+        )}
+
+        {/* Éditeur de combos */}
+        {selectedComboCount > 0 &&
+          beys.slice(0, selectedComboCount).map((bey, index) => (
+            <div
+              key={`bey-${index}-${bey.existingComboId || "new"}`}
+              className="bg-black/60 backdrop-blur-md rounded-xl p-6 mb-8 border border-black animate-float-slow hover-lift"
+            >
+              {/* Nom auto */}
+              <div className="mb-4 p-3 bg-black/50 rounded-lg border border-black">
+                <p className="text-sm font-semibold text-white/80 drop-shadow-[0_1px_0_#000]">
+                  Nom du Combo
+                </p>
+                <p className="text-white font-mono drop-shadow-[0_1px_0_#000]">
+                  {getCurrentComboName(bey, index)}
+                </p>
+                {bey.existingComboId && (
+                  <p className="text-xs text-emerald-300 mt-1 drop-shadow-[0_1px_0_#000]">
+                    ✨ Combo existant — les modifications mettront à jour ce combo
+                  </p>
+                )}
+              </div>
+
+              <div className="mb-4 flex items-center gap-3">
+                <span className="font-semibold drop-shadow-[0_1px_0_#000]">CX ?</span>
+                <input
+                  type="checkbox"
+                  checked={bey.cx}
+                  onChange={(e) => handleBeyCxChange(index, e.target.checked)}
+                  className="w-5 h-5 accent-emerald-500"
+                  disabled={existingParticipant?.is_validated}
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
+                {(bey.cx
+                  ? [
+                      { key: "lockChip", options: lockChips, label: "Lock Chip" },
+                      { key: "blade", options: blades, label: "Blade" },
+                      { key: "assist", options: assists, label: "Assist" },
+                      { key: "ratchet", options: ratchets, label: "Ratchet" },
+                      { key: "bit", options: bits, label: "Bit" },
+                    ]
+                  : [
+                      { key: "blade", options: blades, label: "Blade" },
+                      { key: "ratchet", options: ratchets, label: "Ratchet" },
+                      { key: "bit", options: bits, label: "Bit" },
+                    ]
+                ).map(({ key, options, label }) => {
+                  const pieceKey = key as BeyPieceKey
+                  const selectedValue: string = (bey[pieceKey] ?? "") as string
+                  return (
+                    <Select
+                      key={pieceKey}
+                      onValueChange={(v) => handleBeyPieceSelect(index, pieceKey, v)}
+                      value={selectedValue}
+                      disabled={existingParticipant?.is_validated}
+                    >
+                      <SelectTrigger className="bg-black/60 border border-emerald-500/40">
+                        <SelectValue placeholder={label} />
+                      </SelectTrigger>
+                      <SelectContent className="bg-black text-white max-h-80 overflow-auto">
+                        {options.map((o) => {
+                          const idKey = pieceKey === "lockChip" ? "lock_chip_id" : `${pieceKey}_id`
+                          const optionValue = (o as Record<string, string>)[idKey]
+                          return (
+                            <SelectItem key={optionValue} value={optionValue}>
+                              {o.name} {o.type ? `(${o.type})` : ""}
+                            </SelectItem>
+                          )
+                        })}
+                      </SelectContent>
+                    </Select>
+                  )
+                })}
+              </div>
+            </div>
+          ))}
+
+        {/* Actions */}
+        <div className="flex flex-col md:flex-row gap-4">
+          {existingParticipant && (
+            <Button
+              onClick={handleCancelRegistration}
+              className="flex-1 py-3 text-lg font-bold bg-red-600/80 hover:bg-red-600 text-white rounded-xl border border-black shadow-[0_6px_0_#000] hover:shadow-[0_8px_0_#000] transition-all"
+              disabled={existingParticipant?.is_validated && !isAdmin}
+            >
+              ❌ {isAdmin ? "Annuler l'inscription" : "Se désinscrire"}
+            </Button>
+          )}
+          <Button
+            onClick={handleSubmit}
+            disabled={!selectedTournament || selectedComboCount === 0 || (existingParticipant?.is_validated && !isAdmin)}
+            className="flex-1 py-3 text-lg font-bold bg-emerald-600/80 hover:bg-emerald-600 text-white rounded-xl border border-black shadow-[0_6px_0_#000] hover:shadow-[0_8px_0_#000] transition-all disabled:bg-gray-700 disabled:cursor-not-allowed"
+          >
+            {existingParticipant ? "💾 Modifier le Deck" : "⚡ S'inscrire maintenant"}
+          </Button>
+        </div>
+
+        {existingParticipant?.is_validated && (
+          <div className="mt-4 p-4 bg-emerald-500/10 rounded-lg border border-emerald-500/40">
+            <p className="text-emerald-300 text-center drop-shadow-[0_1px_0_#000]">
+              ✅ L'inscription est validée {!isAdmin && "et ne peut plus être modifiée"}
+            </p>
+            {isAdmin && (
+              <p className="text-yellow-300 text-center text-sm mt-1 drop-shadow-[0_1px_0_#000]">
+                👑 Mode Admin : Vous pouvez toujours modifier cette inscription
+              </p>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  </div>
+)
 }
