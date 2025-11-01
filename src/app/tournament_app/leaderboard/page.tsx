@@ -209,6 +209,10 @@ export default async function LeaderboardPage() {
     )
   }
 
+  // Get all data upfront
+  const regions = [...new Set(playersData.map(p => p.player_region).filter(Boolean))] as string[]
+  const activeTournaments = tournamentsData.filter(t => t.status === "active")
+
   // Generate all leaderboards
   const globalLeaderboard = await getLeaderboardData(
     playersData as Player[],
@@ -221,9 +225,29 @@ export default async function LeaderboardPage() {
     { tournamentId: null }
   )
 
-  // Get regions and tournaments for display
-  const regions = [...new Set(playersData.map(p => p.player_region).filter(Boolean))] as string[]
-  const activeTournaments = tournamentsData.filter(t => t.status === "active")
+  // Generate regional leaderboards
+  const regionalLeaderboards = await Promise.all(
+    regions.map(async (region) => {
+      const data = await getLeaderboardData(
+        playersData as Player[],
+        matchesData as Match[],
+        { region }
+      )
+      return { region, data }
+    })
+  )
+
+  // Generate tournament leaderboards
+  const tournamentLeaderboards = await Promise.all(
+    activeTournaments.map(async (tournament) => {
+      const data = await getLeaderboardData(
+        playersData as Player[],
+        matchesData as Match[],
+        { tournamentId: tournament.tournament_id }
+      )
+      return { tournament, data }
+    })
+  )
 
   return (
     <CyberPage
@@ -270,7 +294,7 @@ export default async function LeaderboardPage() {
         />
       </div>
 
-      {/* Global Leaderboard (Default) */}
+      {/* Global Leaderboard */}
       <LeaderboardCard
         title="🌍 Classement Global"
         description="Tous les matchs confondus"
@@ -285,38 +309,24 @@ export default async function LeaderboardPage() {
       />
 
       {/* Regional Leaderboards */}
-      {regions.map(region => {
-        const regionalData = await getLeaderboardData(
-          playersData as Player[],
-          matchesData as Match[],
-          { region }
-        )
-        return (
-          <LeaderboardCard
-            key={region}
-            title={`📍 ${region}`}
-            description={`Classement régional`}
-            data={regionalData}
-          />
-        )
-      })}
+      {regionalLeaderboards.map(({ region, data }) => (
+        <LeaderboardCard
+          key={region}
+          title={`📍 ${region}`}
+          description={`Classement régional`}
+          data={data}
+        />
+      ))}
 
       {/* Tournament Leaderboards */}
-      {activeTournaments.map(async (tournament) => {
-        const tournamentData = await getLeaderboardData(
-          playersData as Player[],
-          matchesData as Match[],
-          { tournamentId: tournament.tournament_id }
-        )
-        return (
-          <LeaderboardCard
-            key={tournament.tournament_id}
-            title={`🏆 ${tournament.name}`}
-            description={`Tournoi actif`}
-            data={tournamentData}
-          />
-        )
-      })}
+      {tournamentLeaderboards.map(({ tournament, data }) => (
+        <LeaderboardCard
+          key={tournament.tournament_id}
+          title={`🏆 ${tournament.name}`}
+          description={`Tournoi actif`}
+          data={data}
+        />
+      ))}
 
       <p className="text-center text-xs font-mono uppercase tracking-[0.35em] text-gray-400/80">
         datastream :: multi_leaderboard_active
