@@ -288,11 +288,13 @@ function PlayerStatsModal({
 function LeaderboardRow({ 
   entry, 
   index, 
-  onPlayerClick 
+  onPlayerClick,
+  showWins = true
 }: { 
   entry: LeaderboardEntry
   index: number
   onPlayerClick: (playerId: string) => void
+  showWins?: boolean
 }) {
   let bgColor = "bg-white/5 border border-white/15"
   let trophyIcon = null
@@ -322,9 +324,15 @@ function LeaderboardRow({
           </span>
         )}
       </span>
-      <span className="text-base text-cyan-200">
-        {entry.wins} {entry.wins === 1 ? 'victoire' : 'victoires'}
-      </span>
+      {showWins ? (
+        <span className="text-base text-cyan-200">
+          {entry.wins} {entry.wins === 1 ? 'victoire' : 'victoires'}
+        </span>
+      ) : entry.placement ? (
+        <span className="text-base text-purple-200">
+          #{entry.placement}
+        </span>
+      ) : null}
     </div>
   )
 }
@@ -334,12 +342,14 @@ function LeaderboardCard({
   title, 
   description, 
   data,
-  onPlayerClick
+  onPlayerClick,
+  isTournamentBoard = false
 }: { 
   title: string
   description: string
   data: LeaderboardEntry[]
   onPlayerClick: (playerId: string) => void
+  isTournamentBoard?: boolean
 }) {
   return (
     <Card className="border border-white/10 bg-black/70 shadow-[0_0_28px_rgba(0,255,255,0.25)]">
@@ -358,6 +368,7 @@ function LeaderboardCard({
             entry={entry} 
             index={index}
             onPlayerClick={onPlayerClick}
+            showWins={!isTournamentBoard}
           />
         ))}
         {data.length === 0 && (
@@ -536,7 +547,7 @@ export default function LeaderboardPage() {
     return leaderboard.filter(entry => entry.wins > 0).sort((a, b) => b.wins - a.wins)
   }
 
-  // Get tournament participants for a specific tournament
+  // Get tournament participants for a specific tournament - BASED ON PLACEMENT
   function getTournamentParticipants(tournamentId: string): LeaderboardEntry[] {
     const participants = tournamentParticipants
       .filter(p => p.tournament_id === tournamentId && p.is_validated)
@@ -545,16 +556,20 @@ export default function LeaderboardPage() {
         return {
           player_id: participant.player_id,
           player_name: player?.player_name ?? "Inconnu",
-          wins: 0,
+          wins: 0, // Not used for tournament board
           region: player?.player_region ?? "Unknown",
           placement: participant.placement || undefined
         }
       })
       .sort((a, b) => {
-        if (a.placement && b.placement) {
+        // Tri par placement (le plus bas en premier)
+        if (a.placement !== undefined && b.placement !== undefined) {
           return a.placement - b.placement
         }
-        return (a.player_name || "").localeCompare(b.player_name || "")
+        // Si un participant n'a pas de placement, on le met à la fin
+        if (a.placement === undefined) return 1
+        if (b.placement === undefined) return -1
+        return 0
       })
 
     return participants
@@ -606,21 +621,12 @@ export default function LeaderboardPage() {
     
     case "tournament":
       if (selectedTournament) {
-        const matchData = getLeaderboardData({ tournamentId: selectedTournament })
-        
-        if (matchData.length > 0) {
-          currentData = matchData
-          const tournamentInfo = allTournaments.find(t => t.tournament_id === selectedTournament)
-          currentTitle = `🏆 ${tournamentInfo?.name || "Tournoi"}`
-          currentDescription = "Classement basé sur les matchs joués"
-        } else {
-          currentData = getTournamentParticipants(selectedTournament)
-          const tournamentInfo = allTournaments.find(t => t.tournament_id === selectedTournament)
-          currentTitle = `🏆 ${tournamentInfo?.name || "Tournoi"}`
-          currentDescription = currentData.length > 0 
-            ? "Participants validés du tournoi (triés par placement)" 
-            : "Aucun participant validé pour ce tournoi"
-        }
+        currentData = getTournamentParticipants(selectedTournament)
+        const tournamentInfo = allTournaments.find(t => t.tournament_id === selectedTournament)
+        currentTitle = `🏆 ${tournamentInfo?.name || "Tournoi"}`
+        currentDescription = currentData.length > 0 
+          ? "Participants validés du tournoi (triés par placement)" 
+          : "Aucun participant validé pour ce tournoi"
       } else {
         currentData = []
         currentTitle = "🏆 Tournois"
@@ -742,6 +748,7 @@ export default function LeaderboardPage() {
           description={currentDescription}
           data={currentData}
           onPlayerClick={handlePlayerClick}
+          isTournamentBoard={activeBoard === "tournament"}
         />
 
         <p className="text-center text-xs font-mono uppercase tracking-[0.35em] text-gray-400/80">
