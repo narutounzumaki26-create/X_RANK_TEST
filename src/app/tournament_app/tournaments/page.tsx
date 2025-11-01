@@ -29,6 +29,7 @@ export default function TournamentManager() {
   const [currentPlayer, setCurrentPlayer] = useState<Player | null>(null)
   const [loading, setLoading] = useState<boolean>(true)
   const [deleting, setDeleting] = useState<string | null>(null)
+  const [finishing, setFinishing] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [editingTournament, setEditingTournament] = useState<Tournament | null>(null)
   const [showForm, setShowForm] = useState<boolean>(false)
@@ -182,6 +183,49 @@ export default function TournamentManager() {
       description: tournament.description || ''
     })
     setShowForm(true)
+  }
+
+  const handleFinish = async (tournamentId: string): Promise<void> => {
+    if (!isAdmin) {
+      alert('Only administrators can finish tournaments.')
+      return
+    }
+
+    if (!confirm('Are you sure you want to mark this tournament as finished?')) {
+      return
+    }
+
+    setFinishing(tournamentId)
+    
+    try {
+      const { error } = await supabase
+        .from('tournaments')
+        .update({ status: 'finished' })
+        .eq('tournament_id', tournamentId)
+
+      if (error) {
+        if (error.message.includes('row-level security') || error.message.includes('policy')) {
+          throw new Error('Permission denied: Only administrators can finish tournaments.')
+        }
+        throw error
+      }
+
+      // Update local state
+      setTournaments(prev => prev.map(t => 
+        t.tournament_id === tournamentId 
+          ? { ...t, status: 'finished' }
+          : t
+      ))
+      
+      alert('Tournament marked as finished successfully')
+      
+    } catch (err: unknown) {
+      console.error('Error finishing tournament:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Error finishing tournament'
+      alert(`Failed to finish tournament: ${errorMessage}`)
+    } finally {
+      setFinishing(null)
+    }
   }
 
   const handleDelete = async (tournamentId: string): Promise<void> => {
@@ -339,24 +383,6 @@ export default function TournamentManager() {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Status *
-                </label>
-                <select
-                  name="status"
-                  value={formData.status || 'planned'}
-                  onChange={handleInputChange}
-                  required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                >
-                  <option value="planned">Planned</option>
-                  <option value="ongoing">Ongoing</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">
                   Max Combos *
                 </label>
                 <input
@@ -431,6 +457,9 @@ export default function TournamentManager() {
                     DETAILS
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    STATUS
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                     ACTIONS
                   </th>
                 </tr>
@@ -451,23 +480,31 @@ export default function TournamentManager() {
                         <span className="font-medium">Date:</span> {new Date(tournament.date).toLocaleDateString()}
                       </div>
                       <div className="text-sm text-gray-900">
-                        <span className="font-medium">Status:</span> 
-                        <span className={`ml-1 px-2 py-1 text-xs rounded-full ${
-                          tournament.status === 'completed' ? 'bg-green-100 text-green-800' :
-                          tournament.status === 'ongoing' ? 'bg-blue-100 text-blue-800' :
-                          tournament.status === 'cancelled' ? 'bg-red-100 text-red-800' :
-                          'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {tournament.status}
-                        </span>
-                      </div>
-                      <div className="text-sm text-gray-900">
                         <span className="font-medium">Max Combos:</span> {tournament.max_combos}
                       </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <span className={`px-3 py-1 text-xs rounded-full font-medium ${
+                        tournament.status === 'finished' ? 'bg-green-100 text-green-800 border border-green-200' :
+                        tournament.status === 'ongoing' ? 'bg-blue-100 text-blue-800 border border-blue-200' :
+                        tournament.status === 'cancelled' ? 'bg-red-100 text-red-800 border border-red-200' :
+                        'bg-yellow-100 text-yellow-800 border border-yellow-200'
+                      }`}>
+                        {tournament.status.toUpperCase()}
+                      </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
                       {isAdmin ? (
                         <>
+                          {tournament.status !== 'finished' && (
+                            <button
+                              onClick={() => handleFinish(tournament.tournament_id)}
+                              disabled={finishing === tournament.tournament_id}
+                              className="bg-green-600 hover:bg-green-700 disabled:bg-green-400 text-white px-3 py-1 rounded text-sm"
+                            >
+                              {finishing === tournament.tournament_id ? 'Finishing...' : 'Finish'}
+                            </button>
+                          )}
                           <button
                             onClick={() => handleEdit(tournament)}
                             className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
