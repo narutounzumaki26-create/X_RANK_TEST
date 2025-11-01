@@ -34,6 +34,16 @@ interface MatchRow {
   } | null
 }
 
+// Liste de toutes les tables connues qui référencent les joueurs
+const PLAYER_REFERENCE_TABLES = [
+  'matches',
+  'player_stats', 
+  'points',
+  'tournament_participants',
+  'user_blades'
+  // Ajoutez ici toute nouvelle table qui pourrait référencer players
+]
+
 export default function PlayerManager() {
   const [players, setPlayers] = useState<Player[]>([])
   const [loading, setLoading] = useState<boolean>(true)
@@ -95,103 +105,98 @@ export default function PlayerManager() {
     }
   }
 
-  // Vérifier si le joueur a des données dans d'autres tables
-  const checkPlayerReferences = async (playerId: string) => {
-    const references = {
-      matches: 0,
-      player_stats: 0,
-      points: 0,
-      tournament_participants: 0
-    }
+  // Vérifier dynamiquement toutes les tables qui référencent le joueur
+  const checkAllPlayerReferences = async (playerId: string) => {
+    const references: { [key: string]: number } = {}
 
-    try {
-      // Vérifier les matchs
-      const { count: matchesCount, error: matchesError } = await supabase
-        .from('matches')
-        .select('*', { count: 'exact', head: true })
-        .or(`player1_id.eq.${playerId},player2_id.eq.${playerId}`)
+    // Vérifier chaque table connue
+    for (const tableName of PLAYER_REFERENCE_TABLES) {
+      try {
+        const { count, error } = await supabase
+          .from(tableName)
+          .select('*', { count: 'exact', head: true })
+          .eq('player_id', playerId)
 
-      if (!matchesError) references.matches = matchesCount || 0
+        if (!error) {
+          references[tableName] = count || 0
+        } else {
+          // Si la requête échoue, peut-être que la colonne a un nom différent
+          // Essayer avec d'autres noms de colonnes courants
+          const alternativeColumns = ['user_id'] // Autres colonnes possibles
+          for (const column of alternativeColumns) {
+            const { count: altCount, error: altError } = await supabase
+              .from(tableName)
+              .select('*', { count: 'exact', head: true })
+              .eq(column, playerId)
 
-      // Vérifier les statistiques
-      const { count: statsCount, error: statsError } = await supabase
-        .from('player_stats')
-        .select('*', { count: 'exact', head: true })
-        .eq('player_id', playerId)
-
-      if (!statsError) references.player_stats = statsCount || 0
-
-      // Vérifier les points
-      const { count: pointsCount, error: pointsError } = await supabase
-        .from('points')
-        .select('*', { count: 'exact', head: true })
-        .eq('player_id', playerId)
-
-      if (!pointsError) references.points = pointsCount || 0
-
-      // Vérifier les participations aux tournois
-      const { count: participantsCount, error: participantsError } = await supabase
-        .from('tournament_participants')
-        .select('*', { count: 'exact', head: true })
-        .eq('player_id', playerId)
-
-      if (!participantsError) references.tournament_participants = participantsCount || 0
-
-    } catch (err) {
-      console.error('Error checking player references:', err)
+            if (!altError) {
+              references[tableName] = altCount || 0
+              break
+            }
+          }
+          
+          // Si toujours pas trouvé, mettre à 0
+          if (references[tableName] === undefined) {
+            references[tableName] = 0
+          }
+        }
+      } catch (err) {
+        console.error(`Error checking table ${tableName}:`, err)
+        references[tableName] = 0
+      }
     }
 
     return references
   }
 
-  // Supprimer toutes les données d'un joueur
+  // Supprimer toutes les données d'un joueur de toutes les tables
   const deleteAllPlayerData = async (playerId: string): Promise<{ [key: string]: number }> => {
-    const deletedCounts = {
-      matches: 0,
-      player_stats: 0,
-      points: 0,
-      tournament_participants: 0
-    }
+    const deletedCounts: { [key: string]: number } = {}
 
-    try {
-      // 1. Supprimer les matchs
-      const { count: matchesCount, error: matchesError } = await supabase
-        .from('matches')
-        .delete({ count: 'exact' })
-        .or(`player1_id.eq.${playerId},player2_id.eq.${playerId}`)
+    // Supprimer de chaque table connue
+    for (const tableName of PLAYER_REFERENCE_TABLES) {
+      try {
+        let deleteResult
+        
+        // Essayer d'abord avec player_id
+        deleteResult = await supabase
+          .from(tableName)
+          .delete({ count: 'exact' })
+          .eq('player_id', playerId)
 
-      if (!matchesError) deletedCounts.matches = matchesCount || 0
+        if (deleteResult.error) {
+          // Si échec, essayer avec user_id
+          deleteResult = await supabase
+            .from(tableName)
+            .delete({ count: 'exact' })
+            .eq('user_id', playerId)
+        }
 
-      // 2. Supprimer les statistiques
-      const { count: statsCount, error: statsError } = await supabase
-        .from('player_stats')
-        .delete({ count: 'exact' })
-        .eq('player_id', playerId)
-
-      if (!statsError) deletedCounts.player_stats = statsCount || 0
-
-      // 3. Supprimer les points
-      const { count: pointsCount, error: pointsError } = await supabase
-        .from('points')
-        .delete({ count: 'exact' })
-        .eq('player_id', playerId)
-
-      if (!pointsError) deletedCounts.points = pointsCount || 0
-
-      // 4. Supprimer les participations aux tournois
-      const { count: participantsCount, error: participantsError } = await supabase
-        .from('tournament_participants')
-        .delete({ count: 'exact' })
-        .eq('player_id', playerId)
-
-      if (!participantsError) deletedCounts.tournament_participants = participantsCount || 0
-
-    } catch (err) {
-      console.error('Error deleting player data:', err)
-      throw new Error('Failed to delete player data')
+        if (!deleteResult.error) {
+          deletedCounts[tableName] = deleteResult.count || 0
+        } else {
+          deletedCounts[tableName] = 0
+          console.warn(`Could not delete from ${tableName}:`, deleteResult.error)
+        }
+      } catch (err) {
+        console.error(`Error deleting from ${tableName}:`, err)
+        deletedCounts[tableName] = 0
+      }
     }
 
     return deletedCounts
+  }
+
+  // Fonction utilitaire pour formater les noms de tables en français
+  const formatTableName = (tableName: string): string => {
+    const translations: { [key: string]: string } = {
+      'matches': 'matchs',
+      'player_stats': 'statistiques joueur',
+      'points': 'points', 
+      'tournament_participants': 'participations tournois',
+      'user_blades': 'lames utilisateur'
+    }
+    return translations[tableName] || tableName
   }
 
   const fetchData = async (): Promise<void> => {
@@ -317,22 +322,29 @@ export default function PlayerManager() {
   const handleDelete = async (playerId: string): Promise<void> => {
     const playerName = players.find(p => p.player_id === playerId)?.player_name || 'This player'
     
-    // Vérifier toutes les références
-    const references = await checkPlayerReferences(playerId)
+    // Vérifier toutes les références dans toutes les tables
+    const references = await checkAllPlayerReferences(playerId)
     const totalReferences = Object.values(references).reduce((sum, count) => sum + count, 0)
     
     let deleteMessage = `Are you sure you want to delete ${playerName}? This action cannot be undone.`
     
     if (totalReferences > 0) {
-      deleteMessage = `WARNING: This action will PERMANENTLY DELETE:\n\n` +
-                     `• The player profile\n`
+      deleteMessage = `ATTENTION: Cette action supprimera DEFINITIVEMENT:\n\n` +
+                     `• Le profil du joueur\n`
       
-      if (references.matches > 0) deleteMessage += `• ${references.matches} match(es)\n`
-      if (references.player_stats > 0) deleteMessage += `• Player statistics\n`
-      if (references.points > 0) deleteMessage += `• ${references.points} point record(s)\n`
-      if (references.tournament_participants > 0) deleteMessage += `• ${references.tournament_participants} tournament participation(s)\n`
+      // Lister toutes les tables avec des données
+      for (const [tableName, count] of Object.entries(references)) {
+        if (count > 0) {
+          const displayName = formatTableName(tableName)
+          if (tableName === 'matches') {
+            deleteMessage += `• ${count} match(es)\n`
+          } else {
+            deleteMessage += `• ${count} enregistrement(s) dans les ${displayName}\n`
+          }
+        }
+      }
       
-      deleteMessage += `\nThis action cannot be undone!\n\nAre you absolutely sure you want to proceed?`
+      deleteMessage += `\nCette action est IRREVERSIBLE!\n\nÊtes-vous ABSOLUMENT certain de vouloir continuer?`
     }
 
     if (!confirm(deleteMessage)) {
@@ -342,7 +354,7 @@ export default function PlayerManager() {
     setDeletingPlayer(playerId)
     
     try {
-      // Supprimer toutes les données du joueur
+      // Supprimer toutes les données du joueur de toutes les tables
       const deletedCounts = await deleteAllPlayerData(playerId)
 
       // Finalement supprimer le joueur lui-même
@@ -354,16 +366,22 @@ export default function PlayerManager() {
       if (error) throw error
       
       // Message de confirmation détaillé
-      let successMessage = 'Player deleted successfully.'
+      let successMessage = 'Joueur supprimé avec succès.'
       const deletedItems = []
       
-      if (deletedCounts.matches > 0) deletedItems.push(`${deletedCounts.matches} match(es)`)
-      if (deletedCounts.player_stats > 0) deletedItems.push('player statistics')
-      if (deletedCounts.points > 0) deletedItems.push(`${deletedCounts.points} point record(s)`)
-      if (deletedCounts.tournament_participants > 0) deletedItems.push(`${deletedCounts.tournament_participants} tournament participation(s)`)
+      for (const [tableName, count] of Object.entries(deletedCounts)) {
+        if (count > 0) {
+          const displayName = formatTableName(tableName)
+          if (tableName === 'matches') {
+            deletedItems.push(`${count} match(es)`)
+          } else {
+            deletedItems.push(`${count} ${displayName}`)
+          }
+        }
+      }
       
       if (deletedItems.length > 0) {
-        successMessage += ` Also deleted: ${deletedItems.join(', ')}.`
+        successMessage += ` Également supprimé: ${deletedItems.join(', ')}.`
       }
       
       alert(successMessage)
@@ -374,16 +392,19 @@ export default function PlayerManager() {
       const errorMessage = err instanceof Error ? err.message : 'Error deleting player'
       
       if (errorMessage.includes('foreign key constraint')) {
-        // Essayer de trouver quelle table pose encore problème
-        const remainingRefs = await checkPlayerReferences(playerId)
-        const remainingTables = Object.entries(remainingRefs)
+        // Vérifier quelles tables posent encore problème
+        const remainingRefs = await checkAllPlayerReferences(playerId)
+        const problematicTables = Object.entries(remainingRefs)
           .filter(([_, count]) => count > 0)
-          .map(([table]) => table)
-          .join(', ')
+          .map(([table]) => formatTableName(table))
         
-        alert(`Cannot delete player: There are still references in the following tables: ${remainingTables}. Please contact administrator.`)
+        if (problematicTables.length > 0) {
+          alert(`Impossible de supprimer le joueur: Il reste des références dans: ${problematicTables.join(', ')}. Contactez l'administrateur.`)
+        } else {
+          alert('Impossible de supprimer le joueur: Références inconnues dans la base de données. Contactez l\'administrateur.')
+        }
       } else {
-        alert(`Delete failed: ${errorMessage}`)
+        alert(`Échec de la suppression: ${errorMessage}`)
       }
     } finally {
       setDeletingPlayer(null)
