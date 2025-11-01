@@ -512,7 +512,8 @@ export default function LeaderboardPage() {
       region?: string
     }
   ): LeaderboardEntry[] {
-    const winsMap = new Map<string, number>()
+    // Use a plain object instead of Map to avoid TypeScript issues
+    const winsMap: { [key: string]: number } = {}
 
     const filteredMatches = matches.filter(match => {
       if (filter?.tournamentId !== undefined) {
@@ -528,14 +529,14 @@ export default function LeaderboardPage() {
 
     filteredMatches.forEach(match => {
       if (match.winner_id) {
-        winsMap.set(match.winner_id, (winsMap.get(match.winner_id) || 0) + 1)
+        winsMap[match.winner_id] = (winsMap[match.winner_id] || 0) + 1
       }
     })
 
     const leaderboard = players.map(player => ({
       player_id: player.player_id,
       player_name: player.player_name ?? "Inconnu",
-      wins: winsMap.get(player.player_id) || 0,
+      wins: winsMap[player.player_id] || 0,
       region: player.player_region ?? "Unknown"
     }))
 
