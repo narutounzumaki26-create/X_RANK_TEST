@@ -150,12 +150,6 @@ function PlayerStatsModal({
                     <span>{player.player_region}</span>
                   </div>
                 )}
-                {player.player_birth_date && (
-                  <div className="flex items-center gap-1">
-                    <Calendar className="h-4 w-4" />
-                    <span>{new Date(player.player_birth_date).toLocaleDateString()}</span>
-                  </div>
-                )}
               </div>
             </div>
             <button
@@ -420,7 +414,7 @@ export default function LeaderboardPage() {
         setTournamentParticipants(participantsResponse.data || [])
 
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'An error occurred')
+        setError("Please contact an LFBX administrator")
       } finally {
         setLoading(false)
       }
@@ -655,7 +649,10 @@ export default function LeaderboardPage() {
         centerContent
         header={{ title: "Leaderboard", actions: <MainMenuButton /> }}
       >
-        <p className="text-sm text-red-400">❌ Erreur: {error}</p>
+        <div className="text-center text-red-400">
+          <div className="text-lg font-semibold mb-2">❌ Erreur</div>
+          <p className="text-sm">{error}</p>
+        </div>
       </CyberPage>
     )
   }
