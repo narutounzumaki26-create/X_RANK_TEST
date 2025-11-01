@@ -18,12 +18,20 @@ interface Player {
   created_at: string
 }
 
+interface MatchReference {
+  match_id: string
+  tournament_name: string | null
+  opponent_name: string | null
+}
+
 export default function PlayerManager() {
   const [players, setPlayers] = useState<Player[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [error, setError] = useState<string | null>(null)
   const [editingPlayer, setEditingPlayer] = useState<Player | null>(null)
   const [showForm, setShowForm] = useState<boolean>(false)
+  const [deletingPlayer, setDeletingPlayer] = useState<string | null>(null)
+  const [matchReferences, setMatchReferences] = useState<{ [key: string]: MatchReference[] }>({})
 
   const [formData, setFormData] = useState<Partial<Player>>({
     player_name: '',
@@ -35,6 +43,35 @@ export default function PlayerManager() {
     Arbitre: false,
     bladepoints: null
   })
+
+  // Vérifier si un joueur est référencé dans des matchs
+  const checkPlayerMatches = async (playerId: string): Promise<MatchReference[]> => {
+    try {
+      const { data: matches, error: matchesError } = await supabase
+        .from('matches')
+        .select(`
+          match_id,
+          tournament_id,
+          player1_id,
+          player2_id,
+          tournaments (name)
+        `)
+        .or(`player1_id.eq.${playerId},player2_id.eq.${playerId}`)
+
+      if (matchesError) throw matchesError
+
+      return (matches || []).map(match => ({
+        match_id: match.match_id,
+        tournament_name: match.tournaments?.name || 'Tournoi inconnu',
+        opponent_name: match.player1_id === playerId 
+          ? (players.find(p => p.player_id === match.player2_id)?.player_name || 'Adversaire inconnu')
+          : (players.find(p => p.player_id === match.player1_id)?.player_name || 'Adversaire inconnu')
+      }))
+    } catch (err) {
+      console.error('Error checking player matches:', err)
+      return []
+    }
+  }
 
   const fetchData = async (): Promise<void> => {
     try {
@@ -157,31 +194,67 @@ export default function PlayerManager() {
   }
 
   const handleDelete = async (playerId: string): Promise<void> => {
-    if (!confirm('Are you sure you want to delete this player?')) {
+    if (!confirm('Are you sure you want to delete this player? This action cannot be undone.')) {
       return
     }
 
+    setDeletingPlayer(playerId)
+    
     try {
-      const { error } = await supabase
-        .from('players')
-        .delete()
-        .eq('player_id', playerId)
+      // Vérifier d'abord si le joueur a des matchs
+      const matches = await checkPlayerMatches(playerId)
+      
+      if (matches.length > 0) {
+        // Si le joueur a des matchs, on le désactive au lieu de le supprimer
+        const { error } = await supabase
+          .from('players')
+          .update({ 
+            player_name: `[DELETED] ${players.find(p => p.player_id === playerId)?.player_name || 'Player'}`,
+            player_first_name: null,
+            player_last_name: null,
+            player_region: null,
+            Admin: false,
+            Arbitre: false
+          })
+          .eq('player_id', playerId)
 
-      if (error) {
-        if (error.message.includes('row-level security') || error.message.includes('policy')) {
-          throw new Error('Permission denied: Cannot delete players.')
-        }
-        throw error
+        if (error) throw error
+        
+        alert(`Player cannot be deleted because they have ${matches.length} match(es) in the system. Player has been deactivated instead.`)
+      } else {
+        // Si pas de matchs, suppression normale
+        const { error } = await supabase
+          .from('players')
+          .delete()
+          .eq('player_id', playerId)
+
+        if (error) throw error
+        
+        alert('Player deleted successfully')
       }
 
-      setPlayers(prev => prev.filter(p => p.player_id !== playerId))
-      alert('Player deleted successfully')
+      await fetchData()
       
     } catch (err: unknown) {
       console.error('Error deleting player:', err)
       const errorMessage = err instanceof Error ? err.message : 'Error deleting player'
-      alert(`Delete failed: ${errorMessage}`)
+      
+      if (errorMessage.includes('foreign key constraint')) {
+        alert('Cannot delete player: This player has matches in the system. Please deactivate the player instead.')
+      } else {
+        alert(`Delete failed: ${errorMessage}`)
+      }
+    } finally {
+      setDeletingPlayer(null)
     }
+  }
+
+  const handleCheckReferences = async (playerId: string) => {
+    const references = await checkPlayerMatches(playerId)
+    setMatchReferences(prev => ({
+      ...prev,
+      [playerId]: references
+    }))
   }
 
   const handleRetry = (): void => {
@@ -208,6 +281,10 @@ export default function PlayerManager() {
       age--
     }
     return age.toString()
+  }
+
+  const isPlayerDeactivated = (player: Player): boolean => {
+    return player.player_name?.startsWith('[DELETED]') || false
   }
 
   if (loading) {
@@ -418,71 +495,124 @@ export default function PlayerManager() {
                 </tr>
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
-                {players.map((player) => (
-                  <tr key={player.player_id} className="hover:bg-gray-50">
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-gray-900">
-                        {player.player_name || 'Unnamed Player'}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        {player.player_first_name && player.player_last_name 
-                          ? `${player.player_first_name} ${player.player_last_name}`
-                          : 'No full name'
-                        }
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-900">
-                        <span className="font-medium">Region:</span> {player.player_region || 'N/A'}
-                      </div>
-                      <div className="text-sm text-gray-900">
-                        <span className="font-medium">Birth Date:</span> {formatDate(player.player_birth_date)}
-                      </div>
-                      <div className="text-sm text-gray-900">
-                        <span className="font-medium">Age:</span> {calculateAge(player.player_birth_date)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4">
-                      <div className="flex flex-wrap gap-2 mb-2">
-                        {player.Admin && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
-                            Admin
-                          </span>
+                {players.map((player) => {
+                  const isDeactivated = isPlayerDeactivated(player)
+                  const references = matchReferences[player.player_id] || []
+                  
+                  return (
+                    <tr key={player.player_id} className={`hover:bg-gray-50 ${isDeactivated ? 'bg-red-50' : ''}`}>
+                      <td className="px-6 py-4">
+                        <div className={`text-sm font-medium ${isDeactivated ? 'text-red-600 line-through' : 'text-gray-900'}`}>
+                          {player.player_name || 'Unnamed Player'}
+                          {isDeactivated && <span className="ml-2 text-xs text-red-500">(Deactivated)</span>}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          {player.player_first_name && player.player_last_name 
+                            ? `${player.player_first_name} ${player.player_last_name}`
+                            : 'No full name'
+                          }
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="text-sm text-gray-900">
+                          <span className="font-medium">Region:</span> {player.player_region || 'N/A'}
+                        </div>
+                        <div className="text-sm text-gray-900">
+                          <span className="font-medium">Birth Date:</span> {formatDate(player.player_birth_date)}
+                        </div>
+                        <div className="text-sm text-gray-900">
+                          <span className="font-medium">Age:</span> {calculateAge(player.player_birth_date)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex flex-wrap gap-2 mb-2">
+                          {player.Admin && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                              Admin
+                            </span>
+                          )}
+                          {player.Arbitre && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                              Referee
+                            </span>
+                          )}
+                          {isDeactivated && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
+                              Inactive
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-sm text-gray-900">
+                          <span className="font-medium">Bladepoints:</span> {player.bladepoints || 0}
+                        </div>
+                        <div className="text-sm text-gray-500">
+                          Joined: {formatDate(player.created_at)}
+                        </div>
+                        {references.length > 0 && (
+                          <div className="mt-2">
+                            <button
+                              onClick={() => handleCheckReferences(player.player_id)}
+                              className="text-xs text-blue-600 hover:text-blue-800"
+                            >
+                              📊 {references.length} match(es)
+                            </button>
+                          </div>
                         )}
-                        {player.Arbitre && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                            Referee
-                          </span>
-                        )}
-                      </div>
-                      <div className="text-sm text-gray-900">
-                        <span className="font-medium">Bladepoints:</span> {player.bladepoints || 0}
-                      </div>
-                      <div className="text-sm text-gray-500">
-                        Joined: {formatDate(player.created_at)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                      <button
-                        onClick={() => handleEdit(player)}
-                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => handleDelete(player.player_id)}
-                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                        <button
+                          onClick={() => handleEdit(player)}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(player.player_id)}
+                          disabled={deletingPlayer === player.player_id}
+                          className="bg-red-600 hover:bg-red-700 disabled:bg-red-400 text-white px-3 py-1 rounded text-sm"
+                        >
+                          {deletingPlayer === player.player_id ? 'Deleting...' : 'Delete'}
+                        </button>
+                      </td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
         </div>
       )}
+
+      {/* Modal pour afficher les références */}
+      {Object.entries(matchReferences).map(([playerId, references]) => (
+        references.length > 0 && (
+          <div key={playerId} className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-96 overflow-y-auto">
+              <h3 className="text-lg font-semibold mb-4">
+                Matches for {players.find(p => p.player_id === playerId)?.player_name}
+              </h3>
+              <div className="space-y-2">
+                {references.map(match => (
+                  <div key={match.match_id} className="border-b pb-2">
+                    <div className="text-sm">
+                      <strong>Tournament:</strong> {match.tournament_name}
+                    </div>
+                    <div className="text-sm">
+                      <strong>Opponent:</strong> {match.opponent_name}
+                    </div>
+                  </div>
+                ))}
+              </div>
+              <button
+                onClick={() => setMatchReferences(prev => ({ ...prev, [playerId]: [] }))}
+                className="mt-4 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )
+      ))}
     </div>
   )
 }
