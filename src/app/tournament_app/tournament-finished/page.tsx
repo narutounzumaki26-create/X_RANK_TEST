@@ -57,6 +57,11 @@ type ParticipantRow = {
   } | null;
 };
 
+type Player = {
+  player_id: string;
+  player_name: string | null;
+};
+
 export default function FinishedTournamentsPage() {
   const [tournamentsList, setTournamentsList] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
@@ -65,7 +70,7 @@ export default function FinishedTournamentsPage() {
   const [showRankingModal, setShowRankingModal] = useState(false);
   const [editingPlacements, setEditingPlacements] = useState<{ [key: string]: number }>({});
   const [saving, setSaving] = useState(false);
-  const [players, setPlayers] = useState<{player_id: string; player_name: string | null}[]>([]);
+  const [players, setPlayers] = useState<Player[]>([]);
 
   // Récupérer tous les joueurs pour pouvoir récupérer les noms des vainqueurs
   const fetchAllPlayers = useCallback(async () => {
@@ -75,9 +80,10 @@ export default function FinishedTournamentsPage() {
         .select("player_id, player_name");
       
       if (playersError) throw playersError;
-      setPlayers(data || []);
+      return data || [];
     } catch (err) {
       console.error("Error fetching players:", err);
+      return [];
     }
   }, []);
 
@@ -115,7 +121,8 @@ export default function FinishedTournamentsPage() {
 
     try {
       // D'abord récupérer tous les joueurs
-      await fetchAllPlayers();
+      const allPlayers = await fetchAllPlayers();
+      setPlayers(allPlayers);
 
       // Récupérer les tournois sans la jointure qui cause l'erreur
       const { data, error: fetchError } = await supabase
@@ -151,7 +158,7 @@ export default function FinishedTournamentsPage() {
         // Trouver le nom du vainqueur depuis la liste des joueurs
         let winnerName = "Non défini";
         if (row.winner_id) {
-          const winnerPlayer = players.find(p => p.player_id === row.winner_id);
+          const winnerPlayer = allPlayers.find(p => p.player_id === row.winner_id);
           winnerName = winnerPlayer?.player_name || `Joueur ${row.winner_id.slice(0, 8)}`;
         }
 
@@ -174,7 +181,7 @@ export default function FinishedTournamentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [fetchAllPlayers, players]);
+  }, [fetchAllPlayers]);
 
   useEffect(() => {
     void fetchFinishedTournaments();
@@ -252,11 +259,6 @@ export default function FinishedTournamentsPage() {
 
       alert("Vainqueur défini avec succès !");
       await fetchFinishedTournaments();
-      // Refresh the modal with updated data
-      const updatedTournament = tournamentsList.find(t => t.tournament_id === selectedTournament.tournament_id);
-      if (updatedTournament) {
-        setSelectedTournament(updatedTournament);
-      }
     } catch (err) {
       console.error("Error setting winner:", err);
       alert("Erreur lors de la définition du vainqueur");
