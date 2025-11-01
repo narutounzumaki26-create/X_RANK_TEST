@@ -166,7 +166,6 @@ export default function LeaderboardPage() {
     async function fetchData() {
       try {
         setLoading(true)
-        const supabase = createSupabaseBrowserClient()
         
         // Fetch all data in parallel
         const [playersResponse, matchesResponse, tournamentsResponse] = await Promise.all([
