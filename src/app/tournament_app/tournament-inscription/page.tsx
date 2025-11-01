@@ -321,7 +321,7 @@ export default function TournamentInscriptionPage() {
 
   const handleSubmit = async () => {
     if (!targetPlayerId || !selectedTournament) {
-      alert("Erreur d'authentification ou tournoi non sélectionné !");
+      alert("Erreur d&apos;authentification ou tournoi non sélectionné !");
       return;
     }
 
@@ -443,7 +443,7 @@ export default function TournamentInscriptionPage() {
         alert(`Erreur : ${err.message}`);
       } else {
         console.error(err);
-        alert("Erreur lors de l'inscription.");
+        alert("Erreur lors de l&apos;inscription.");
       }
     }
   };
@@ -481,7 +481,7 @@ export default function TournamentInscriptionPage() {
         setBeys([]);
       } catch (err) {
         console.error("Erreur détaillée:", err);
-        alert(`Erreur lors de l'annulation: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
+        alert(`Erreur lors de l&apos;annulation: ${err instanceof Error ? err.message : 'Erreur inconnue'}`);
       }
     }
   };
@@ -650,7 +650,7 @@ export default function TournamentInscriptionPage() {
               )}
             </p>
             <p className="text-white/70 text-sm mt-2 drop-shadow-[0_1px_0_#000]">
-              Sélectionnez un tournoi puis construisez votre deck pour valider l'inscription.
+              Sélectionnez un tournoi puis construisez votre deck pour valider l&apos;inscription.
             </p>
           </div>
         )}
@@ -674,7 +674,7 @@ export default function TournamentInscriptionPage() {
               </SelectContent>
             </Select>
             <p className="mt-2 text-sm text-white/70 drop-shadow-[0_1px_0_#000]">
-              Vous pouvez inscrire n'importe quel joueur.
+              Vous pouvez inscrire n&apos;importe quel joueur.
             </p>
           </div>
         )}
@@ -776,7 +776,7 @@ export default function TournamentInscriptionPage() {
               Choisissez entre 1 et {tournamentDetails.max_combos} combo(s) pour ce tournoi
               {existingParticipant?.is_validated && (
                 <span className="block text-red-300 mt-1">
-                  ⚠️ L'inscription est validée, vous ne pouvez plus modifier le nombre de combos
+                  ⚠️ L&apos;inscription est validée, vous ne pouvez plus modifier le nombre de combos
                 </span>
               )}
             </p>
@@ -869,7 +869,7 @@ export default function TournamentInscriptionPage() {
               className="flex-1 py-3 text-lg font-bold bg-red-600/80 hover:bg-red-600 text-white rounded-xl border border-black shadow-[0_6px_0_#000] hover:shadow-[0_8px_0_#000] transition-all"
               disabled={existingParticipant?.is_validated && !isAdmin}
             >
-              ❌ {isAdmin ? "Annuler l'inscription" : "Se désinscrire"}
+              ❌ {isAdmin ? "Annuler l&apos;inscription" : "Se désinscrire"}
             </Button>
           )}
           <Button
@@ -877,14 +877,14 @@ export default function TournamentInscriptionPage() {
             disabled={!selectedTournament || selectedComboCount === 0 || (existingParticipant?.is_validated && !isAdmin)}
             className="flex-1 py-3 text-lg font-bold bg-emerald-600/80 hover:bg-emerald-600 text-white rounded-xl border border-black shadow-[0_6px_0_#000] hover:shadow-[0_8px_0_#000] transition-all disabled:bg-gray-700 disabled:cursor-not-allowed"
           >
-            {existingParticipant ? "💾 Modifier le Deck" : "⚡ S'inscrire maintenant"}
+            {existingParticipant ? "💾 Modifier le Deck" : "⚡ S&apos;inscrire maintenant"}
           </Button>
         </div>
 
         {existingParticipant?.is_validated && (
           <div className="mt-4 p-4 bg-emerald-500/10 rounded-lg border border-emerald-500/40">
             <p className="text-emerald-300 text-center drop-shadow-[0_1px_0_#000]">
-              ✅ L'inscription est validée {!isAdmin && "et ne peut plus être modifiée"}
+              ✅ L&apos;inscription est validée {!isAdmin && "et ne peut plus être modifiée"}
             </p>
             {isAdmin && (
               <p className="text-yellow-300 text-center text-sm mt-1 drop-shadow-[0_1px_0_#000]">
