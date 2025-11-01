@@ -11,11 +11,55 @@ import {
   CardDescription,
 } from "@/components/ui/card"
 
-// Leaderboard calculation function
-async function calculateLeaderboard(options?: {
+// Type definitions
+interface Player {
+  player_id: string
+  player_name: string | null
+  player_region: string | null
+}
+
+interface Tournament {
+  tournament_id: string
+  name: string
+  date: string
+}
+
+interface Match {
+  match_id: string
+  player_id: string
+  player2_id: string
+  winner_id: string
+  tournament_id: string | null
+  spin_finishes: number | null
+  over_finishes: number | null
+  burst_finishes: number | null
+  xtreme_finishes: number | null
+  spin_finishes2: number | null
+  over_finishes2: number | null
+  burst_finishes2: number | null
+  xtreme_finishes2: number | null
+  players_matches_player_id_fkey: Player
+  players_matches_player2_id_fkey: Player
+  tournaments: Tournament | null
+}
+
+interface LeaderboardEntry {
+  player_id: string
+  player_name: string
+  player_region: string | null
+  total_score: number
+  wins: number
+  total_matches: number
+  win_rate: number
+}
+
+interface LeaderboardOptions {
   region?: string
   tournamentId?: string | null
-}) {
+}
+
+// Leaderboard calculation function
+async function calculateLeaderboard(options?: LeaderboardOptions): Promise<LeaderboardEntry[]> {
   const supabase = await createSupabaseServerClient()
 
   // Get all matches with filters
@@ -45,7 +89,7 @@ async function calculateLeaderboard(options?: {
         player_name,
         player_region
       ),
-      tournaments!left(name)
+      tournaments!left(name, date)
     `)
 
   // Apply filters
@@ -65,9 +109,9 @@ async function calculateLeaderboard(options?: {
   }
 
   // Calculate player statistics
-  const playerStats = new Map<string, any>()
+  const playerStats = new Map<string, LeaderboardEntry>()
 
-  matches?.forEach(match => {
+  matches?.forEach((match: Match) => {
     const player1 = match.players_matches_player_id_fkey
     const player2 = match.players_matches_player2_id_fkey
     
@@ -100,11 +144,11 @@ async function calculateLeaderboard(options?: {
 }
 
 function updatePlayerStats(
-  stats: Map<string, any>,
-  player: any,
-  match: any,
+  stats: Map<string, LeaderboardEntry>,
+  player: Player,
+  match: Match,
   isWinner: boolean
-) {
+): void {
   const existing = stats.get(player.player_id) || {
     player_id: player.player_id,
     player_name: player.player_name || 'Unknown',
@@ -129,7 +173,7 @@ function updatePlayerStats(
   stats.set(player.player_id, existing)
 }
 
-function calculateMatchPoints(match: any, isWinner: boolean): number {
+function calculateMatchPoints(match: Match, isWinner: boolean): number {
   let points = 0
 
   if (isWinner) {
@@ -169,7 +213,7 @@ function calculateMatchPoints(match: any, isWinner: boolean): number {
 }
 
 // Helper functions to get regions and tournaments
-async function getRegions() {
+async function getRegions(): Promise<string[]> {
   const supabase = await createSupabaseServerClient()
   const { data } = await supabase
     .from('players')
@@ -181,7 +225,7 @@ async function getRegions() {
   return regions as string[]
 }
 
-async function getTournaments() {
+async function getTournaments(): Promise<Tournament[]> {
   const supabase = await createSupabaseServerClient()
   const { data } = await supabase
     .from('tournaments')
@@ -201,8 +245,8 @@ function LeaderboardSection({
 }: {
   title: string
   subtitle: string
-  icon: any
-  data: any[]
+  icon: React.ComponentType<{ className?: string }>
+  data: LeaderboardEntry[]
   emptyMessage?: string
 }) {
   return (
