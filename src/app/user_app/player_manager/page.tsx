@@ -1,0 +1,488 @@
+// components/PlayerManager.tsx
+'use client'
+
+import { useState, useEffect } from 'react'
+import { supabase } from "@/lib/supabaseClient"
+
+interface Player {
+  player_id: string
+  user_id: string | null
+  player_name: string | null
+  player_first_name: string | null
+  player_last_name: string | null
+  player_birth_date: string | null
+  player_region: string | null
+  Admin: boolean
+  Arbitre: boolean
+  bladepoints: number | null
+  created_at: string
+}
+
+export default function PlayerManager() {
+  const [players, setPlayers] = useState<Player[]>([])
+  const [loading, setLoading] = useState<boolean>(true)
+  const [error, setError] = useState<string | null>(null)
+  const [editingPlayer, setEditingPlayer] = useState<Player | null>(null)
+  const [showForm, setShowForm] = useState<boolean>(false)
+
+  const [formData, setFormData] = useState<Partial<Player>>({
+    player_name: '',
+    player_first_name: '',
+    player_last_name: '',
+    player_birth_date: '',
+    player_region: '',
+    Admin: false,
+    Arbitre: false,
+    bladepoints: null
+  })
+
+  const fetchData = async (): Promise<void> => {
+    try {
+      setError(null)
+
+      const { data, error: fetchError } = await supabase
+        .from('players')
+        .select('*')
+        .order('player_name', { ascending: true })
+
+      if (fetchError) {
+        if (fetchError.message.includes('row-level security')) {
+          throw new Error('RLS Policy Error: Cannot access players. Check database permissions.')
+        }
+        throw fetchError
+      }
+
+      setPlayers(data || [])
+
+    } catch (err: unknown) {
+      console.error('Error in fetchData:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Error loading data'
+      setError(errorMessage)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    fetchData()
+  }, [])
+
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>): void => {
+    const { name, value, type } = e.target
+    setFormData(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : 
+              type === 'number' ? (value === '' ? null : parseInt(value)) : value
+    }))
+  }
+
+  const resetForm = (): void => {
+    setFormData({
+      player_name: '',
+      player_first_name: '',
+      player_last_name: '',
+      player_birth_date: '',
+      player_region: '',
+      Admin: false,
+      Arbitre: false,
+      bladepoints: null
+    })
+    setEditingPlayer(null)
+    setShowForm(false)
+  }
+
+  const handleSubmit = async (e: React.FormEvent): Promise<void> => {
+    e.preventDefault()
+    
+    try {
+      const submissionData: Record<string, unknown> = { ...formData }
+      
+      // Clean up empty strings for optional fields
+      const optionalFields = ['player_name', 'player_first_name', 'player_last_name', 'player_region']
+      optionalFields.forEach(field => {
+        if (submissionData[field] === '') {
+          submissionData[field] = null
+        }
+      })
+
+      if (editingPlayer) {
+        const { error } = await supabase
+          .from('players')
+          .update(submissionData)
+          .eq('player_id', editingPlayer.player_id)
+
+        if (error) {
+          if (error.message.includes('row-level security') || error.message.includes('policy')) {
+            throw new Error('Permission denied: Cannot update players.')
+          }
+          throw error
+        }
+        alert('Player updated successfully')
+      } else {
+        const { error } = await supabase
+          .from('players')
+          .insert([submissionData])
+
+        if (error) {
+          if (error.message.includes('row-level security') || error.message.includes('policy')) {
+            throw new Error('Permission denied: Cannot create players.')
+          }
+          throw error
+        }
+        alert('Player created successfully')
+      }
+
+      await fetchData()
+      resetForm()
+    } catch (err: unknown) {
+      console.error('Error saving player:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Error saving player'
+      alert(`Error: ${errorMessage}`)
+    }
+  }
+
+  const handleEdit = (player: Player): void => {
+    setEditingPlayer(player)
+    setFormData({
+      player_name: player.player_name || '',
+      player_first_name: player.player_first_name || '',
+      player_last_name: player.player_last_name || '',
+      player_birth_date: player.player_birth_date || '',
+      player_region: player.player_region || '',
+      Admin: player.Admin,
+      Arbitre: player.Arbitre,
+      bladepoints: player.bladepoints
+    })
+    setShowForm(true)
+  }
+
+  const handleDelete = async (playerId: string): Promise<void> => {
+    if (!confirm('Are you sure you want to delete this player?')) {
+      return
+    }
+
+    try {
+      const { error } = await supabase
+        .from('players')
+        .delete()
+        .eq('player_id', playerId)
+
+      if (error) {
+        if (error.message.includes('row-level security') || error.message.includes('policy')) {
+          throw new Error('Permission denied: Cannot delete players.')
+        }
+        throw error
+      }
+
+      setPlayers(prev => prev.filter(p => p.player_id !== playerId))
+      alert('Player deleted successfully')
+      
+    } catch (err: unknown) {
+      console.error('Error deleting player:', err)
+      const errorMessage = err instanceof Error ? err.message : 'Error deleting player'
+      alert(`Delete failed: ${errorMessage}`)
+    }
+  }
+
+  const handleRetry = (): void => {
+    setLoading(true)
+    fetchData()
+  }
+
+  const showCreateForm = (): void => {
+    setShowForm(true)
+  }
+
+  const formatDate = (dateString: string | null): string => {
+    if (!dateString) return 'N/A'
+    return new Date(dateString).toLocaleDateString('fr-FR')
+  }
+
+  const calculateAge = (birthDate: string | null): string => {
+    if (!birthDate) return 'N/A'
+    const today = new Date()
+    const birth = new Date(birthDate)
+    let age = today.getFullYear() - birth.getFullYear()
+    const monthDiff = today.getMonth() - birth.getMonth()
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birth.getDate())) {
+      age--
+    }
+    return age.toString()
+  }
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center min-h-64">
+        <div className="text-lg">Loading players...</div>
+      </div>
+    )
+  }
+
+  if (error) {
+    return (
+      <div className="p-6 max-w-6xl mx-auto">
+        <div className="bg-red-50 border border-red-200 rounded-lg p-6">
+          <h2 className="text-red-800 text-xl font-semibold mb-2">Error</h2>
+          <p className="text-red-600 mb-4">{error}</p>
+          <button
+            onClick={handleRetry}
+            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md"
+          >
+            Try Again
+          </button>
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="p-6 max-w-6xl mx-auto">
+      <div className="flex justify-between items-center mb-6">
+        <h1 className="text-3xl font-bold text-gray-900">Player Manager</h1>
+        <div className="flex items-center space-x-4">
+          <div className="text-sm text-gray-500">
+            {players.length} player{players.length !== 1 ? 's' : ''}
+          </div>
+          <button
+            onClick={showCreateForm}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-md"
+          >
+            Add Player
+          </button>
+          <button
+            onClick={handleRetry}
+            className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded text-sm"
+          >
+            Refresh
+          </button>
+        </div>
+      </div>
+
+      {showForm && (
+        <div className="bg-white p-6 rounded-lg shadow-md mb-6">
+          <h2 className="text-xl font-semibold mb-4">
+            {editingPlayer ? 'Edit Player' : 'Add New Player'}
+          </h2>
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Player Name
+                </label>
+                <input
+                  type="text"
+                  name="player_name"
+                  value={formData.player_name || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  First Name
+                </label>
+                <input
+                  type="text"
+                  name="player_first_name"
+                  value={formData.player_first_name || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Last Name
+                </label>
+                <input
+                  type="text"
+                  name="player_last_name"
+                  value={formData.player_last_name || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Birth Date
+                </label>
+                <input
+                  type="date"
+                  name="player_birth_date"
+                  value={formData.player_birth_date || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Region
+                </label>
+                <input
+                  type="text"
+                  name="player_region"
+                  value={formData.player_region || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Bladepoints
+                </label>
+                <input
+                  type="number"
+                  name="bladepoints"
+                  value={formData.bladepoints || ''}
+                  onChange={handleInputChange}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              <div className="flex items-center space-x-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="Admin"
+                    checked={formData.Admin || false}
+                    onChange={handleInputChange}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Administrator</span>
+                </label>
+
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    name="Arbitre"
+                    checked={formData.Arbitre || false}
+                    onChange={handleInputChange}
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="ml-2 text-sm text-gray-700">Referee</span>
+                </label>
+              </div>
+            </div>
+
+            <div className="flex space-x-3">
+              <button
+                type="submit"
+                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md"
+              >
+                {editingPlayer ? 'Update Player' : 'Add Player'}
+              </button>
+              <button
+                type="button"
+                onClick={resetForm}
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded-md"
+              >
+                Cancel
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {players.length === 0 ? (
+        <div className="text-center py-12 bg-white rounded-lg shadow">
+          <p className="text-gray-500 text-lg mb-4">No players found</p>
+          <button
+            onClick={showCreateForm}
+            className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded"
+          >
+            Add First Player
+          </button>
+        </div>
+      ) : (
+        <div className="bg-white shadow-md rounded-lg overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-gray-200">
+              <thead className="bg-gray-50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    PLAYER INFO
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    DETAILS
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    ROLES & STATS
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                    ACTIONS
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="bg-white divide-y divide-gray-200">
+                {players.map((player) => (
+                  <tr key={player.player_id} className="hover:bg-gray-50">
+                    <td className="px-6 py-4">
+                      <div className="text-sm font-medium text-gray-900">
+                        {player.player_name || 'Unnamed Player'}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        {player.player_first_name && player.player_last_name 
+                          ? `${player.player_first_name} ${player.player_last_name}`
+                          : 'No full name'
+                        }
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Region:</span> {player.player_region || 'N/A'}
+                      </div>
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Birth Date:</span> {formatDate(player.player_birth_date)}
+                      </div>
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Age:</span> {calculateAge(player.player_birth_date)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4">
+                      <div className="flex flex-wrap gap-2 mb-2">
+                        {player.Admin && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                            Admin
+                          </span>
+                        )}
+                        {player.Arbitre && (
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                            Referee
+                          </span>
+                        )}
+                      </div>
+                      <div className="text-sm text-gray-900">
+                        <span className="font-medium">Bladepoints:</span> {player.bladepoints || 0}
+                      </div>
+                      <div className="text-sm text-gray-500">
+                        Joined: {formatDate(player.created_at)}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                      <button
+                        onClick={() => handleEdit(player)}
+                        className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-1 rounded text-sm"
+                      >
+                        Edit
+                      </button>
+                      <button
+                        onClick={() => handleDelete(player.player_id)}
+                        className="bg-red-600 hover:bg-red-700 text-white px-3 py-1 rounded text-sm"
+                      >
+                        Delete
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+    </div>
+  )
+}
