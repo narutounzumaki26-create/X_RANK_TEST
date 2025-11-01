@@ -96,6 +96,36 @@ export default function PlayerManager() {
     }
   }
 
+  // Supprimer tous les matchs d'un joueur
+  const deletePlayerMatches = async (playerId: string): Promise<void> => {
+    try {
+      const { error: matchesError } = await supabase
+        .from('matches')
+        .delete()
+        .or(`player1_id.eq.${playerId},player2_id.eq.${playerId}`)
+
+      if (matchesError) throw matchesError
+    } catch (err) {
+      console.error('Error deleting player matches:', err)
+      throw new Error('Failed to delete player matches')
+    }
+  }
+
+  // Supprimer les participations aux tournois
+  const deleteTournamentParticipations = async (playerId: string): Promise<void> => {
+    try {
+      const { error: participantsError } = await supabase
+        .from('tournament_participants')
+        .delete()
+        .eq('player_id', playerId)
+
+      if (participantsError) throw participantsError
+    } catch (err) {
+      console.error('Error deleting tournament participations:', err)
+      throw new Error('Failed to delete tournament participations')
+    }
+  }
+
   const fetchData = async (): Promise<void> => {
     try {
       setError(null)
@@ -217,56 +247,58 @@ export default function PlayerManager() {
   }
 
   const handleDelete = async (playerId: string): Promise<void> => {
-    if (!confirm('Are you sure you want to delete this player? This action cannot be undone.')) {
-      return
+    const playerName = players.find(p => p.player_id === playerId)?.player_name || 'This player'
+    const matches = await checkPlayerMatches(playerId)
+    
+    if (matches.length > 0) {
+      const confirmMessage = `WARNING: This player has ${matches.length} match(es) in the system.\n\n` +
+                           `This action will PERMANENTLY DELETE:\n` +
+                           `• All matches involving this player (${matches.length} match(es))\n` +
+                           `• All tournament participations\n` +
+                           `• The player profile\n\n` +
+                           `This action cannot be undone!\n\n` +
+                           `Are you absolutely sure you want to proceed?`
+      
+      if (!confirm(confirmMessage)) {
+        return
+      }
+    } else {
+      if (!confirm(`Are you sure you want to delete ${playerName}? This action cannot be undone.`)) {
+        return
+      }
     }
 
     setDeletingPlayer(playerId)
     
     try {
-      // Vérifier d'abord si le joueur a des matchs
-      const matches = await checkPlayerMatches(playerId)
-      
+      // Étape 1: Supprimer tous les matchs du joueur
       if (matches.length > 0) {
-        // Si le joueur a des matchs, on le désactive au lieu de le supprimer
-        const { error } = await supabase
-          .from('players')
-          .update({ 
-            player_name: `[DELETED] ${players.find(p => p.player_id === playerId)?.player_name || 'Player'}`,
-            player_first_name: null,
-            player_last_name: null,
-            player_region: null,
-            Admin: false,
-            Arbitre: false
-          })
-          .eq('player_id', playerId)
-
-        if (error) throw error
-        
-        alert(`Player cannot be deleted because they have ${matches.length} match(es) in the system. Player has been deactivated instead.`)
-      } else {
-        // Si pas de matchs, suppression normale
-        const { error } = await supabase
-          .from('players')
-          .delete()
-          .eq('player_id', playerId)
-
-        if (error) throw error
-        
-        alert('Player deleted successfully')
+        await deletePlayerMatches(playerId)
       }
 
+      // Étape 2: Supprimer les participations aux tournois
+      await deleteTournamentParticipations(playerId)
+
+      // Étape 3: Supprimer le joueur lui-même
+      const { error } = await supabase
+        .from('players')
+        .delete()
+        .eq('player_id', playerId)
+
+      if (error) throw error
+      
+      // Message de confirmation avec le nombre de matchs supprimés
+      const successMessage = matches.length > 0 
+        ? `Player deleted successfully. ${matches.length} match(es) were also deleted.`
+        : 'Player deleted successfully.'
+      
+      alert(successMessage)
       await fetchData()
       
     } catch (err: unknown) {
       console.error('Error deleting player:', err)
       const errorMessage = err instanceof Error ? err.message : 'Error deleting player'
-      
-      if (errorMessage.includes('foreign key constraint')) {
-        alert('Cannot delete player: This player has matches in the system. Please deactivate the player instead.')
-      } else {
-        alert(`Delete failed: ${errorMessage}`)
-      }
+      alert(`Delete failed: ${errorMessage}`)
     } finally {
       setDeletingPlayer(null)
     }
@@ -304,10 +336,6 @@ export default function PlayerManager() {
       age--
     }
     return age.toString()
-  }
-
-  const isPlayerDeactivated = (player: Player): boolean => {
-    return player.player_name?.startsWith('[DELETED]') || false
   }
 
   if (loading) {
@@ -519,15 +547,13 @@ export default function PlayerManager() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {players.map((player) => {
-                  const isDeactivated = isPlayerDeactivated(player)
                   const references = matchReferences[player.player_id] || []
                   
                   return (
-                    <tr key={player.player_id} className={`hover:bg-gray-50 ${isDeactivated ? 'bg-red-50' : ''}`}>
+                    <tr key={player.player_id} className="hover:bg-gray-50">
                       <td className="px-6 py-4">
-                        <div className={`text-sm font-medium ${isDeactivated ? 'text-red-600 line-through' : 'text-gray-900'}`}>
+                        <div className="text-sm font-medium text-gray-900">
                           {player.player_name || 'Unnamed Player'}
-                          {isDeactivated && <span className="ml-2 text-xs text-red-500">(Deactivated)</span>}
                         </div>
                         <div className="text-sm text-gray-500">
                           {player.player_first_name && player.player_last_name 
@@ -559,11 +585,6 @@ export default function PlayerManager() {
                               Referee
                             </span>
                           )}
-                          {isDeactivated && (
-                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">
-                              Inactive
-                            </span>
-                          )}
                         </div>
                         <div className="text-sm text-gray-900">
                           <span className="font-medium">Bladepoints:</span> {player.bladepoints || 0}
@@ -575,9 +596,9 @@ export default function PlayerManager() {
                           <div className="mt-2">
                             <button
                               onClick={() => handleCheckReferences(player.player_id)}
-                              className="text-xs text-blue-600 hover:text-blue-800"
+                              className="text-xs text-orange-600 hover:text-orange-800 font-semibold"
                             >
-                              📊 {references.length} match(es)
+                              ⚠️ {references.length} match(es) - WILL BE DELETED
                             </button>
                           </div>
                         )}
@@ -611,10 +632,10 @@ export default function PlayerManager() {
         references.length > 0 && (
           <div key={playerId} className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-96 overflow-y-auto">
-              <h3 className="text-lg font-semibold mb-4">
-                Matches for {players.find(p => p.player_id === playerId)?.player_name}
+              <h3 className="text-lg font-semibold mb-4 text-red-600">
+                ⚠️ Matches that will be DELETED for {players.find(p => p.player_id === playerId)?.player_name}
               </h3>
-              <div className="space-y-2">
+              <div className="space-y-2 mb-4">
                 {references.map(match => (
                   <div key={match.match_id} className="border-b pb-2">
                     <div className="text-sm">
@@ -626,9 +647,12 @@ export default function PlayerManager() {
                   </div>
                 ))}
               </div>
+              <p className="text-sm text-red-600 mb-4 font-semibold">
+                These {references.length} match(es) will be PERMANENTLY DELETED along with the player.
+              </p>
               <button
                 onClick={() => setMatchReferences(prev => ({ ...prev, [playerId]: [] }))}
-                className="mt-4 bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
+                className="bg-gray-500 hover:bg-gray-600 text-white px-4 py-2 rounded"
               >
                 Close
               </button>
