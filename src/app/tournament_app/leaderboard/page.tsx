@@ -10,6 +10,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card"
+import Link from "next/link"
 
 type Player = {
   player_id: string
@@ -76,40 +77,45 @@ async function getLeaderboardData(
   return leaderboard.filter(entry => entry.wins > 0).sort((a, b) => b.wins - a.wins)
 }
 
-// Selection Window Component (now static)
+// Selection Window Component with Link
 function SelectionWindow({
   icon,
   title,
   description,
-  isActive
+  isActive,
+  href
 }: {
   icon: React.ReactNode
   title: string
   description: string
   isActive: boolean
+  href: string
 }) {
   return (
-    <div
-      className={`p-4 rounded-xl border-2 transition-all duration-300 ${
+    <Link
+      href={href}
+      className={`p-4 rounded-xl border-2 transition-all duration-300 text-left group cursor-pointer block ${
         isActive
-          ? "border-cyan-400 bg-cyan-500/10 shadow-[0_0_25px_rgba(0,255,255,0.35)]"
-          : "border-white/20 bg-white/5"
+          ? "border-cyan-400 bg-cyan-500/10 shadow-[0_0_25px_rgba(0,255,255,0.35)] scale-105"
+          : "border-white/20 bg-white/5 hover:border-white/40 hover:bg-white/10 hover:shadow-[0_0_20px_rgba(255,255,255,0.1)]"
       }`}
     >
-      <div className={`mb-2 ${isActive ? "text-cyan-300" : "text-gray-400"}`}>
+      <div className={`mb-2 transition-colors ${
+        isActive ? "text-cyan-300" : "text-gray-400 group-hover:text-white"
+      }`}>
         {icon}
       </div>
-      <h3 className={`font-mono font-bold text-sm mb-1 ${
-        isActive ? "text-cyan-200" : "text-white"
+      <h3 className={`font-mono font-bold text-sm mb-1 transition-colors ${
+        isActive ? "text-cyan-200" : "text-white group-hover:text-cyan-100"
       }`}>
         {title}
       </h3>
-      <p className={`text-xs ${
-        isActive ? "text-cyan-100/80" : "text-gray-400"
+      <p className={`text-xs transition-colors ${
+        isActive ? "text-cyan-100/80" : "text-gray-400 group-hover:text-gray-300"
       }`}>
         {description}
       </p>
-    </div>
+    </Link>
   )
 }
 
@@ -176,7 +182,11 @@ function LeaderboardCard({
   )
 }
 
-export default async function LeaderboardPage() {
+export default async function LeaderboardPage({
+  searchParams,
+}: {
+  searchParams: { [key: string]: string | string[] | undefined }
+}) {
   const supabase = await createSupabaseServerClient()
 
   const { data: playersData, error: playersError } = await supabase
@@ -204,123 +214,157 @@ export default async function LeaderboardPage() {
     )
   }
 
+  // Get URL params to determine active view
+  const view = searchParams.view as string || "global"
+  const region = searchParams.region as string
+  const tournament = searchParams.tournament as string
+
   // Get all data upfront
   const regions = [...new Set(playersData.map(p => p.player_region).filter(Boolean))] as string[]
   const activeTournaments = tournamentsData.filter(t => t.status === "active")
 
-  // Generate all leaderboards
-  const globalLeaderboard = await getLeaderboardData(
-    playersData as Player[],
-    matchesData as Match[]
-  )
+  let currentData: LeaderboardEntry[] = []
+  let currentTitle = ""
+  let currentDescription = ""
 
-  const officialMatchesLeaderboard = await getLeaderboardData(
-    playersData as Player[],
-    matchesData as Match[],
-    { tournamentId: null }
-  )
-
-  // Generate regional leaderboards
-  const regionalLeaderboards = await Promise.all(
-    regions.map(async (region) => {
-      const data = await getLeaderboardData(
-        playersData as Player[],
-        matchesData as Match[],
-        { region }
+  // Determine which data to show based on URL params
+  switch (view) {
+    case "global":
+      currentData = await getLeaderboardData(playersData as Player[], matchesData as Match[])
+      currentTitle = "🌍 Classement Global"
+      currentDescription = "Tous les matchs confondus"
+      break
+    
+    case "official":
+      currentData = await getLeaderboardData(
+        playersData as Player[], 
+        matchesData as Match[], 
+        { tournamentId: null }
       )
-      return { region, data }
-    })
-  )
+      currentTitle = "⚔️ Matchs Officiels"
+      currentDescription = "Matchs hors tournoi (tournament_id = null)"
+      break
+    
+    case "regional":
+      if (region) {
+        currentData = await getLeaderboardData(
+          playersData as Player[], 
+          matchesData as Match[], 
+          { region }
+        )
+        currentTitle = `📍 ${region}`
+        currentDescription = "Classement régional"
+      }
+      break
+    
+    case "tournament":
+      if (tournament) {
+        currentData = await getLeaderboardData(
+          playersData as Player[], 
+          matchesData as Match[], 
+          { tournamentId: tournament }
+        )
+        const tournamentInfo = tournamentsData.find(t => t.tournament_id === tournament)
+        currentTitle = `🏆 ${tournamentInfo?.name || "Tournoi"}`
+        currentDescription = "Classement du tournoi"
+      }
+      break
+  }
 
-  // Generate tournament leaderboards
-  const tournamentLeaderboards = await Promise.all(
-    activeTournaments.map(async (tournament) => {
-      const data = await getLeaderboardData(
-        playersData as Player[],
-        matchesData as Match[],
-        { tournamentId: tournament.tournament_id }
-      )
-      return { tournament, data }
-    })
-  )
+  // Fallback if no data for the selected view
+  if (currentData.length === 0 && (view === "regional" || view === "tournament")) {
+    currentData = await getLeaderboardData(playersData as Player[], matchesData as Match[])
+    currentTitle = "🌍 Classement Global"
+    currentDescription = "Aucune donnée disponible pour la sélection, affichage du classement global"
+  }
 
   return (
     <CyberPage
       header={{
         eyebrow: "datastream//ranking",
         title: "🏆 Multi-Leaderboards",
-        subtitle: "Classements par catégorie",
+        subtitle: "Sélectionnez une catégorie",
         actions: <MainMenuButton />,
       }}
       contentClassName="mx-auto w-full max-w-4xl gap-6"
     >
-      {/* Selection Grid - Now static display */}
+      {/* Selection Grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <SelectionWindow
           icon={<Globe className="h-5 w-5" />}
           title="Global"
           description="Tous les matchs"
-          isActive={true}
+          isActive={view === "global"}
+          href="/leaderboard?view=global"
         />
         
         <SelectionWindow
           icon={<Sword className="h-5 w-5" />}
           title="Officiels"
           description="Hors tournoi"
-          isActive={false}
+          isActive={view === "official"}
+          href="/leaderboard?view=official"
         />
         
         <SelectionWindow
           icon={<MapPin className="h-5 w-5" />}
           title="Régional"
           description="Par région"
-          isActive={false}
+          isActive={view === "regional"}
+          href="/leaderboard?view=regional"
         />
         
         <SelectionWindow
           icon={<Trophy className="h-5 w-5" />}
           title="Tournois"
           description="Compétitions"
-          isActive={false}
+          isActive={view === "tournament"}
+          href="/leaderboard?view=tournament"
         />
       </div>
 
-      {/* Global Leaderboard */}
+      {/* Sub-selection for Regional and Tournament */}
+      {(view === "regional" || view === "tournament") && (
+        <div className="flex flex-wrap gap-3 mb-6">
+          {view === "regional" && regions.map(regionItem => (
+            <Link
+              key={regionItem}
+              href={`/leaderboard?view=regional&region=${encodeURIComponent(regionItem)}`}
+              className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
+                region === regionItem
+                  ? "bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(0,255,255,0.3)]"
+                  : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
+              }`}
+            >
+              {regionItem}
+            </Link>
+          ))}
+          
+          {view === "tournament" && activeTournaments.map(tournamentItem => (
+            <Link
+              key={tournamentItem.tournament_id}
+              href={`/leaderboard?view=tournament&tournament=${tournamentItem.tournament_id}`}
+              className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
+                tournament === tournamentItem.tournament_id
+                  ? "bg-purple-500/20 border-purple-400 text-purple-200 shadow-[0_0_15px_rgba(192,132,252,0.3)]"
+                  : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
+              }`}
+            >
+              {tournamentItem.name}
+            </Link>
+          ))}
+        </div>
+      )}
+
+      {/* Main Leaderboard Display */}
       <LeaderboardCard
-        title="🌍 Classement Global"
-        description="Tous les matchs confondus"
-        data={globalLeaderboard}
+        title={currentTitle}
+        description={currentDescription}
+        data={currentData}
       />
-
-      {/* Official Matches Leaderboard */}
-      <LeaderboardCard
-        title="⚔️ Matchs Officiels"
-        description="Matchs hors tournoi (tournament_id = null)"
-        data={officialMatchesLeaderboard}
-      />
-
-      {/* Regional Leaderboards */}
-      {regionalLeaderboards.map(({ region, data }) => (
-        <LeaderboardCard
-          key={region}
-          title={`📍 ${region}`}
-          description={`Classement régional`}
-          data={data}
-        />
-      ))}
-
-      {/* Tournament Leaderboards */}
-      {tournamentLeaderboards.map(({ tournament, data }) => (
-        <LeaderboardCard
-          key={tournament.tournament_id}
-          title={`🏆 ${tournament.name}`}
-          description={`Tournoi actif`}
-          data={data}
-        />
-      ))}
 
       <p className="text-center text-xs font-mono uppercase tracking-[0.35em] text-gray-400/80">
-        datastream :: multi_leaderboard_active
+        datastream :: {view}_leaderboard_active
       </p>
     </CyberPage>
   )
