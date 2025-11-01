@@ -1,6 +1,38 @@
 // lib/leaderboard-calculations.ts
 import { createSupabaseServerClient } from "@/lib/supabaseServer"
 
+// Type definitions
+interface Player {
+  player_id: string
+  player_name: string | null
+  player_region: string | null
+}
+
+interface Tournament {
+  tournament_id: string
+  name: string
+  date: string
+}
+
+interface Match {
+  match_id: string
+  player_id: string
+  player2_id: string
+  winner_id: string
+  tournament_id: string | null
+  spin_finishes: number | null
+  over_finishes: number | null
+  burst_finishes: number | null
+  xtreme_finishes: number | null
+  spin_finishes2: number | null
+  over_finishes2: number | null
+  burst_finishes2: number | null
+  xtreme_finishes2: number | null
+  players_matches_player_id_fkey: Player
+  players_matches_player2_id_fkey: Player
+  tournaments: Tournament | null
+}
+
 export interface LeaderboardEntry {
   player_id: string
   player_name: string
@@ -11,10 +43,12 @@ export interface LeaderboardEntry {
   win_rate: number
 }
 
-export async function calculateLeaderboard(options?: {
+export interface LeaderboardOptions {
   region?: string
   tournamentId?: string | null
-}): Promise<LeaderboardEntry[]> {
+}
+
+export async function calculateLeaderboard(options?: LeaderboardOptions): Promise<LeaderboardEntry[]> {
   const supabase = await createSupabaseServerClient()
 
   // Get all matches with filters
@@ -26,6 +60,14 @@ export async function calculateLeaderboard(options?: {
       player2_id,
       winner_id,
       tournament_id,
+      spin_finishes,
+      over_finishes,
+      burst_finishes,
+      xtreme_finishes,
+      spin_finishes2,
+      over_finishes2,
+      burst_finishes2,
+      xtreme_finishes2,
       players!matches_player_id_fkey(
         player_id,
         player_name,
@@ -36,7 +78,7 @@ export async function calculateLeaderboard(options?: {
         player_name,
         player_region
       ),
-      tournaments!left(name)
+      tournaments!left(name, date)
     `)
 
   // Apply filters
@@ -58,7 +100,7 @@ export async function calculateLeaderboard(options?: {
   // Calculate player statistics
   const playerStats = new Map<string, LeaderboardEntry>()
 
-  matches?.forEach(match => {
+  matches?.forEach((match: Match) => {
     const player1 = match.players_matches_player_id_fkey
     const player2 = match.players_matches_player2_id_fkey
     
@@ -92,10 +134,10 @@ export async function calculateLeaderboard(options?: {
 
 function updatePlayerStats(
   stats: Map<string, LeaderboardEntry>,
-  player: any,
-  match: any,
+  player: Player,
+  match: Match,
   isWinner: boolean
-) {
+): void {
   const existing = stats.get(player.player_id) || {
     player_id: player.player_id,
     player_name: player.player_name || 'Unknown',
@@ -120,7 +162,7 @@ function updatePlayerStats(
   stats.set(player.player_id, existing)
 }
 
-function calculateMatchPoints(match: any, isWinner: boolean): number {
+function calculateMatchPoints(match: Match, isWinner: boolean): number {
   let points = 0
 
   if (isWinner) {
@@ -157,4 +199,45 @@ function calculateMatchPoints(match: any, isWinner: boolean): number {
   }
 
   return points
+}
+
+// Get available regions
+export async function getRegions(): Promise<string[]> {
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase
+    .from('players')
+    .select('player_region')
+    .not('player_region', 'is', null)
+    .not('player_region', 'eq', '')
+
+  if (error) {
+    console.error('Error fetching regions:', error)
+    return []
+  }
+
+  const regions = [...new Set(data.map(item => item.player_region))].filter(Boolean)
+  return regions as string[]
+}
+
+// Get tournaments for filter
+export async function getTournaments(): Promise<Array<{
+  tournament_id: string | null
+  name: string
+}>> {
+  const supabase = await createSupabaseServerClient()
+  const { data, error } = await supabase
+    .from('tournaments')
+    .select('tournament_id, name')
+    .order('date', { ascending: false })
+
+  if (error) {
+    console.error('Error fetching tournaments:', error)
+    return []
+  }
+
+  // Add "Official Matches" option for null tournament_id
+  return [
+    { tournament_id: null, name: 'Official Matches' },
+    ...(data || [])
+  ]
 }
