@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react"; // Ajouter useCallback
+import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
 
 import { supabase } from "@/lib/supabaseClient";
@@ -49,6 +49,14 @@ type Participant = {
   current_placement: number | null;
 };
 
+type ParticipantRow = {
+  player_id: string;
+  placement: number | null;
+  player: {
+    player_name: string | null;
+  } | null;
+};
+
 export default function FinishedTournamentsPage() {
   const [tournamentsList, setTournamentsList] = useState<Tournament[]>([]);
   const [loading, setLoading] = useState(true);
@@ -69,15 +77,14 @@ export default function FinishedTournamentsPage() {
         `)
         .eq("tournament_id", tournamentId)
         .eq("is_validated", true)
-        .order("placement", { ascending: true });
+        .order("placement", { ascending: true })
+        .returns<ParticipantRow[]>();
 
       if (participantsError) throw participantsError;
 
       return (data || []).map(participant => ({
         player_id: participant.player_id,
-        player_name: Array.isArray(participant.player) 
-          ? participant.player[0]?.player_name 
-          : participant.player?.player_name,
+        player_name: participant.player?.player_name || null,
         current_placement: participant.placement
       }));
     } catch (err) {
@@ -125,14 +132,17 @@ export default function FinishedTournamentsPage() {
         }));
 
         const winnerField = row.winner;
-        const winnerArray = Array.isArray(winnerField)
-          ? winnerField
-          : winnerField
-          ? [winnerField]
-          : [];
-        const winnerName =
-          winnerArray[0]?.player_name ??
-          (row.winner_id ? `Joueur ${row.winner_id.slice(0, 8)}` : "Non défini");
+        let winnerName = "Non défini";
+        
+        if (winnerField) {
+          if (Array.isArray(winnerField)) {
+            winnerName = winnerField[0]?.player_name || `Joueur ${row.winner_id?.slice(0, 8) || 'inconnu'}`;
+          } else {
+            winnerName = winnerField.player_name || `Joueur ${row.winner_id?.slice(0, 8) || 'inconnu'}`;
+          }
+        } else if (row.winner_id) {
+          winnerName = `Joueur ${row.winner_id.slice(0, 8)}`;
+        }
 
         tournamentsWithParticipants.push({
           tournament_id: row.tournament_id,
@@ -153,11 +163,11 @@ export default function FinishedTournamentsPage() {
     } finally {
       setLoading(false);
     }
-  }, []); // fetchTournamentParticipants n'est pas inclus car utilisé à l'intérieur
+  }, []);
 
   useEffect(() => {
     void fetchFinishedTournaments();
-  }, [fetchFinishedTournaments]); // Maintenant la dépendance est stable
+  }, [fetchFinishedTournaments]);
 
   const handleShowRanking = (tournament: Tournament) => {
     setSelectedTournament(tournament);
