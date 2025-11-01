@@ -22,6 +22,13 @@ interface Player {
   Admin?: boolean
 }
 
+// Liste de toutes les tables qui référencent les tournois
+const TOURNAMENT_REFERENCE_TABLES = [
+  'matches',
+  'tournament_participants'
+  // Ajoutez ici toute nouvelle table qui pourrait référencer tournaments
+]
+
 export default function TournamentManager() {
   const [tournaments, setTournaments] = useState<Tournament[]>([])
   const [players, setPlayers] = useState<Player[]>([])
@@ -45,6 +52,68 @@ export default function TournamentManager() {
 
   // Check if current user is admin
   const isAdmin = currentPlayer?.Admin === true
+
+  // Vérifier toutes les références d'un tournoi
+  const checkTournamentReferences = async (tournamentId: string) => {
+    const references: { [key: string]: number } = {}
+
+    // Vérifier chaque table connue
+    for (const tableName of TOURNAMENT_REFERENCE_TABLES) {
+      try {
+        const { count, error } = await supabase
+          .from(tableName)
+          .select('*', { count: 'exact', head: true })
+          .eq('tournament_id', tournamentId)
+
+        if (!error) {
+          references[tableName] = count || 0
+        } else {
+          references[tableName] = 0
+        }
+      } catch (err) {
+        console.error(`Error checking table ${tableName}:`, err)
+        references[tableName] = 0
+      }
+    }
+
+    return references
+  }
+
+  // Supprimer toutes les données d'un tournoi
+  const deleteAllTournamentData = async (tournamentId: string): Promise<{ [key: string]: number }> => {
+    const deletedCounts: { [key: string]: number } = {}
+
+    // Supprimer de chaque table connue
+    for (const tableName of TOURNAMENT_REFERENCE_TABLES) {
+      try {
+        const { count, error } = await supabase
+          .from(tableName)
+          .delete({ count: 'exact' })
+          .eq('tournament_id', tournamentId)
+
+        if (!error) {
+          deletedCounts[tableName] = count || 0
+        } else {
+          deletedCounts[tableName] = 0
+          console.warn(`Could not delete from ${tableName}:`, error)
+        }
+      } catch (err) {
+        console.error(`Error deleting from ${tableName}:`, err)
+        deletedCounts[tableName] = 0
+      }
+    }
+
+    return deletedCounts
+  }
+
+  // Fonction utilitaire pour formater les noms de tables en français
+  const formatTableName = (tableName: string): string => {
+    const translations: { [key: string]: string } = {
+      'matches': 'matchs',
+      'tournament_participants': 'participants'
+    }
+    return translations[tableName] || tableName
+  }
 
   const fetchData = async (): Promise<void> => {
     try {
@@ -234,32 +303,98 @@ export default function TournamentManager() {
       return
     }
 
-    if (!confirm('Are you sure you want to delete this tournament?')) {
+    const tournamentName = tournaments.find(t => t.tournament_id === tournamentId)?.name || 'This tournament'
+    
+    // Vérifier toutes les références
+    const references = await checkTournamentReferences(tournamentId)
+    const totalReferences = Object.values(references).reduce((sum, count) => sum + count, 0)
+    
+    let deleteMessage = `Are you sure you want to delete "${tournamentName}"? This action cannot be undone.`
+    
+    if (totalReferences > 0) {
+      deleteMessage = `WARNING: This action will PERMANENTLY DELETE:\n\n` +
+                     `• The tournament "${tournamentName}"\n`
+      
+      // Lister toutes les tables avec des données
+      for (const [tableName, count] of Object.entries(references)) {
+        if (count > 0) {
+          const displayName = formatTableName(tableName)
+          if (tableName === 'matches') {
+            deleteMessage += `• ${count} match(es)\n`
+          } else if (tableName === 'tournament_participants') {
+            deleteMessage += `• ${count} tournament participation(s)\n`
+          } else {
+            deleteMessage += `• ${count} record(s) in ${displayName}\n`
+          }
+        }
+      }
+      
+      deleteMessage += `\nThis action cannot be undone!\n\nAre you absolutely sure you want to proceed?`
+    }
+
+    if (!confirm(deleteMessage)) {
       return
     }
 
     setDeleting(tournamentId)
     
     try {
+      // Supprimer toutes les données associées au tournoi
+      const deletedCounts = await deleteAllTournamentData(tournamentId)
+
+      // Finalement supprimer le tournoi lui-même
       const { error } = await supabase
         .from('tournaments')
         .delete()
         .eq('tournament_id', tournamentId)
 
-      if (error) {
-        if (error.message.includes('row-level security') || error.message.includes('policy')) {
-          throw new Error('Permission denied: Only administrators can delete tournaments.')
+      if (error) throw error
+      
+      // Message de confirmation détaillé
+      let successMessage = `Tournament "${tournamentName}" deleted successfully.`
+      const deletedItems = []
+      
+      for (const [tableName, count] of Object.entries(deletedCounts)) {
+        if (count > 0) {
+          const displayName = formatTableName(tableName)
+          if (tableName === 'matches') {
+            deletedItems.push(`${count} match(es)`)
+          } else if (tableName === 'tournament_participants') {
+            deletedItems.push(`${count} participation(s)`)
+          } else {
+            deletedItems.push(`${count} ${displayName}`)
+          }
         }
-        throw error
       }
-
+      
+      if (deletedItems.length > 0) {
+        successMessage += ` Also deleted: ${deletedItems.join(', ')}.`
+      }
+      
+      alert(successMessage)
+      
+      // Mettre à jour l'état local
       setTournaments(prev => prev.filter(t => t.tournament_id !== tournamentId))
-      alert('Tournament deleted successfully')
       
     } catch (err: unknown) {
       console.error('Error deleting tournament:', err)
       const errorMessage = err instanceof Error ? err.message : 'Error deleting tournament'
-      alert(`Delete failed: ${errorMessage}`)
+      
+      if (errorMessage.includes('foreign key constraint')) {
+        // Vérifier quelles tables posent encore problème
+        const remainingRefs = await checkTournamentReferences(tournamentId)
+        const problematicTables = Object.entries(remainingRefs)
+          .filter(([_, count]) => count > 0)
+          .map(([table]) => formatTableName(table))
+        
+        if (problematicTables.length > 0) {
+          alert(`Cannot delete tournament: There are still references in: ${problematicTables.join(', ')}. Please contact administrator.`)
+        } else {
+          alert('Cannot delete tournament: Unknown references in the database. Contact administrator.')
+        }
+      } else {
+        alert(`Delete failed: ${errorMessage}`)
+      }
     } finally {
       setDeleting(null)
     }
