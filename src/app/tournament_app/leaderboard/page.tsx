@@ -34,11 +34,19 @@ type Tournament = {
   status: string
 }
 
+type TournamentParticipant = {
+  tournament_id: string
+  player_id: string
+  is_validated: boolean
+  placement: number | null
+}
+
 type LeaderboardEntry = {
   player_id: string
   player_name: string
   wins: number
   region: string
+  placement?: number
 }
 
 type LeaderboardType = "global" | "official" | "regional" | "tournament"
@@ -108,8 +116,15 @@ function LeaderboardRow({ entry, index }: { entry: LeaderboardEntry; index: numb
       <span className="flex items-center text-sm font-semibold tracking-wide">
         {trophyIcon}
         {index + 1}. {entry.player_name}
+        {entry.placement && (
+          <span className="text-xs text-gray-400 bg-black/30 px-2 py-1 rounded ml-2">
+            Placement: {entry.placement}
+          </span>
+        )}
       </span>
-      <span className="text-base text-cyan-200">{entry.wins} victoires</span>
+      <span className="text-base text-cyan-200">
+        {entry.wins} {entry.wins === 1 ? 'victoire' : 'victoires'}
+      </span>
     </div>
   )
 }
@@ -156,6 +171,7 @@ export default function LeaderboardPage() {
   const [players, setPlayers] = useState<Player[]>([])
   const [matches, setMatches] = useState<Match[]>([])
   const [tournaments, setTournaments] = useState<Tournament[]>([])
+  const [tournamentParticipants, setTournamentParticipants] = useState<TournamentParticipant[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
@@ -166,23 +182,27 @@ export default function LeaderboardPage() {
         setLoading(true)
         
         // Fetch all data in parallel
-        const [playersResponse, matchesResponse, tournamentsResponse] = await Promise.all([
+        const [
+          playersResponse, 
+          matchesResponse, 
+          tournamentsResponse,
+          participantsResponse
+        ] = await Promise.all([
           supabase.from("players").select("player_id, player_name, player_region"),
           supabase.from("matches").select("match_id, tournament_id, player1_id, player2_id, winner_id"),
-          supabase.from("tournaments").select("tournament_id, name, status")
+          supabase.from("tournaments").select("tournament_id, name, status"),
+          supabase.from("tournament_participants").select("tournament_id, player_id, is_validated, placement")
         ])
 
         if (playersResponse.error) throw new Error(playersResponse.error.message)
         if (matchesResponse.error) throw new Error(matchesResponse.error.message)
         if (tournamentsResponse.error) throw new Error(tournamentsResponse.error.message)
-
-        console.log("Players:", playersResponse.data)
-        console.log("Matches:", matchesResponse.data)
-        console.log("Tournaments:", tournamentsResponse.data)
+        if (participantsResponse.error) throw new Error(participantsResponse.error.message)
 
         setPlayers(playersResponse.data || [])
         setMatches(matchesResponse.data || [])
         setTournaments(tournamentsResponse.data || [])
+        setTournamentParticipants(participantsResponse.data || [])
 
       } catch (err) {
         setError(err instanceof Error ? err.message : 'An error occurred')
@@ -231,9 +251,34 @@ export default function LeaderboardPage() {
     return leaderboard.filter(entry => entry.wins > 0).sort((a, b) => b.wins - a.wins)
   }
 
-  // Get regions and ALL tournaments (not just active)
+  // Get tournament participants for a specific tournament
+  function getTournamentParticipants(tournamentId: string): LeaderboardEntry[] {
+    const participants = tournamentParticipants
+      .filter(p => p.tournament_id === tournamentId && p.is_validated)
+      .map(participant => {
+        const player = players.find(p => p.player_id === participant.player_id)
+        return {
+          player_id: participant.player_id,
+          player_name: player?.player_name ?? "Inconnu",
+          wins: 0, // No wins data from participants table
+          region: player?.player_region ?? "Unknown",
+          placement: participant.placement || undefined
+        }
+      })
+      .sort((a, b) => {
+        // Sort by placement if available, otherwise by name
+        if (a.placement && b.placement) {
+          return a.placement - b.placement
+        }
+        return (a.player_name || "").localeCompare(b.player_name || "")
+      })
+
+    return participants
+  }
+
+  // Get regions and ALL tournaments
   const regions = [...new Set(players.map(p => p.player_region).filter(Boolean))] as string[]
-  const allTournaments = tournaments // Show all tournaments, not just active ones
+  const allTournaments = tournaments
 
   // Auto-select first region/tournament when switching to those views
   useEffect(() => {
@@ -264,27 +309,41 @@ export default function LeaderboardPage() {
       break
     
     case "regional":
-      if (selectedRegion && regions.length > 0) {
+      if (selectedRegion) {
         currentData = getLeaderboardData({ region: selectedRegion })
         currentTitle = `📍 ${selectedRegion}`
         currentDescription = "Classement régional"
       } else {
         currentData = []
         currentTitle = "📍 Régions"
-        currentDescription = regions.length === 0 ? "Aucune région disponible" : "Choisissez une région dans la liste ci-dessous"
+        currentDescription = "Choisissez une région dans la liste ci-dessous"
       }
       break
     
     case "tournament":
-      if (selectedTournament && allTournaments.length > 0) {
-        currentData = getLeaderboardData({ tournamentId: selectedTournament })
-        const tournamentInfo = allTournaments.find(t => t.tournament_id === selectedTournament)
-        currentTitle = `🏆 ${tournamentInfo?.name || "Tournoi"}`
-        currentDescription = `Tournoi - ${tournamentInfo?.status || "Statut inconnu"}`
+      if (selectedTournament) {
+        // First try to get match-based leaderboard
+        const matchData = getLeaderboardData({ tournamentId: selectedTournament })
+        
+        if (matchData.length > 0) {
+          // If there are matches, show match results
+          currentData = matchData
+          const tournamentInfo = allTournaments.find(t => t.tournament_id === selectedTournament)
+          currentTitle = `🏆 ${tournamentInfo?.name || "Tournoi"}`
+          currentDescription = "Classement basé sur les matchs joués"
+        } else {
+          // If no matches, show tournament participants
+          currentData = getTournamentParticipants(selectedTournament)
+          const tournamentInfo = allTournaments.find(t => t.tournament_id === selectedTournament)
+          currentTitle = `🏆 ${tournamentInfo?.name || "Tournoi"}`
+          currentDescription = currentData.length > 0 
+            ? "Participants validés du tournoi (triés par placement)" 
+            : "Aucun participant validé pour ce tournoi"
+        }
       } else {
         currentData = []
         currentTitle = "🏆 Tournois"
-        currentDescription = allTournaments.length === 0 ? "Aucun tournoi disponible" : "Choisissez un tournoi dans la liste ci-dessous"
+        currentDescription = "Choisissez un tournoi dans la liste ci-dessous"
       }
       break
   }
@@ -362,40 +421,32 @@ export default function LeaderboardPage() {
       {/* Sub-selection for Regional and Tournament */}
       {(activeBoard === "regional" || activeBoard === "tournament") && (
         <div className="flex flex-wrap gap-3 mb-6">
-          {activeBoard === "regional" && (regions.length > 0 ? (
-            regions.map(region => (
-              <button
-                key={region}
-                onClick={() => setSelectedRegion(region)}
-                className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
-                  selectedRegion === region
-                    ? "bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(0,255,255,0.3)]"
-                    : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
-                }`}
-              >
-                {region}
-              </button>
-            ))
-          ) : (
-            <p className="text-gray-400 text-sm">Aucune région disponible</p>
+          {activeBoard === "regional" && regions.map(region => (
+            <button
+              key={region}
+              onClick={() => setSelectedRegion(region)}
+              className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
+                selectedRegion === region
+                  ? "bg-cyan-500/20 border-cyan-400 text-cyan-200 shadow-[0_0_15px_rgba(0,255,255,0.3)]"
+                  : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
+              }`}
+            >
+              {region}
+            </button>
           ))}
           
-          {activeBoard === "tournament" && (allTournaments.length > 0 ? (
-            allTournaments.map(tournament => (
-              <button
-                key={tournament.tournament_id}
-                onClick={() => setSelectedTournament(tournament.tournament_id)}
-                className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
-                  selectedTournament === tournament.tournament_id
-                    ? "bg-purple-500/20 border-purple-400 text-purple-200 shadow-[0_0_15px_rgba(192,132,252,0.3)]"
-                    : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
-                }`}
-              >
-                {tournament.name} ({tournament.status})
-              </button>
-            ))
-          ) : (
-            <p className="text-gray-400 text-sm">Aucun tournoi disponible</p>
+          {activeBoard === "tournament" && allTournaments.map(tournament => (
+            <button
+              key={tournament.tournament_id}
+              onClick={() => setSelectedTournament(tournament.tournament_id)}
+              className={`px-4 py-2 rounded-lg border font-mono text-sm transition-all ${
+                selectedTournament === tournament.tournament_id
+                  ? "bg-purple-500/20 border-purple-400 text-purple-200 shadow-[0_0_15px_rgba(192,132,252,0.3)]"
+                  : "bg-white/5 border-white/20 text-gray-300 hover:bg-white/10"
+              }`}
+            >
+              {tournament.name}
+            </button>
           ))}
         </div>
       )}
