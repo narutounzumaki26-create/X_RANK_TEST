@@ -53,7 +53,7 @@ export default function MatchManager() {
   const fetchData = async (): Promise<void> => {
     try {
       setError(null)
-      console.log('Starting to fetch data...')
+      //.log('Starting to fetch data...')
 
       // Fetch matches
       const { data: matchesData, error: matchesError } = await supabase
@@ -62,30 +62,21 @@ export default function MatchManager() {
         .order('rounds', { ascending: false })
 
       if (matchesError) {
-        console.error('Matches error:', matchesError)
+        //.error('Matches error:', matchesError)
         throw new Error(`Matches: ${matchesError.message}`)
       }
 
-      console.log('Matches fetched:', matchesData?.length)
+      //.log('Matches fetched:', matchesData?.length)
 
       // Fetch players from the players table (only player_id and player_name)
       const { data: playersData, error: playersError } = await supabase
         .from('players')
         .select('player_id, player_name')
 
-      if (playersError) {
-        console.error('Players error:', playersError)
-        // Continue without players if there's an error
-        console.warn('Could not load players, continuing with matches only')
-      } else {
-        console.log('Players fetched:', playersData?.length)
-        setPlayers(playersData || [])
-      }
-
       setMatches(matchesData || [])
 
     } catch (err: unknown) {
-      console.error('Error in fetchData:', err)
+      //.error('Error in fetchData:', err)
       const errorMessage = err instanceof Error ? err.message : 'Error loading data'
       setError(errorMessage)
     } finally {
@@ -132,7 +123,7 @@ export default function MatchManager() {
       setMatches(matches.filter((match: Match) => match.match_id !== matchId))
       alert('Match deleted successfully')
     } catch (err: unknown) {
-      console.error('Error deleting match:', err)
+      //.error('Error deleting match:', err)
       const errorMessage = err instanceof Error ? err.message : 'Error deleting match'
       alert(`Error deleting match: ${errorMessage}`)
     } finally {
