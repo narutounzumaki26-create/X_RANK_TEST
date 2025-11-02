@@ -1,7 +1,7 @@
 // components/MatchManager.tsx
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { supabase } from "@/lib/supabaseClient";
 
 // Types defined directly in the component file
@@ -37,8 +37,8 @@ export default function MatchManager() {
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // Fetch all data
-  const fetchData = async (): Promise<void> => {
+  // Fetch all data - wrapped in useCallback to prevent unnecessary re-renders
+  const fetchData = useCallback(async (): Promise<void> => {
     try {
       setError(null)
       //.log('Starting to fetch data...')
@@ -79,11 +79,11 @@ export default function MatchManager() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
   useEffect(() => {
     fetchData()
-  }, [])
+  }, [fetchData]) // Added fetchData to dependency array
 
   // Get player name by ID
   const getPlayerName = (playerId: string | undefined): string => {
