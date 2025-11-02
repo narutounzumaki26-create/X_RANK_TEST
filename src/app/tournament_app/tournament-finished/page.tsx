@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 import { supabase } from "@/lib/supabaseClient";
 import { CyberPage } from "@/components/layout/CyberPage";
@@ -71,6 +72,7 @@ export default function FinishedTournamentsPage() {
   const [editingPlacements, setEditingPlacements] = useState<{ [key: string]: number }>({});
   const [saving, setSaving] = useState(false);
   const [players, setPlayers] = useState<Player[]>([]);
+  const router = useRouter();
 
   // Récupérer tous les joueurs pour pouvoir récupérer les noms des vainqueurs
   const fetchAllPlayers = useCallback(async () => {
@@ -120,6 +122,25 @@ export default function FinishedTournamentsPage() {
     setError(null);
 
     try {
+      // Admin check
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        router.push("/");
+        return;
+      }
+
+      const { data: playerData } = await supabase
+        .from("players")
+        .select("Admin")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!playerData?.Admin) {
+        router.push("/");
+        return;
+      }
+
       // D'abord récupérer tous les joueurs
       const allPlayers = await fetchAllPlayers();
       setPlayers(allPlayers);
@@ -181,7 +202,7 @@ export default function FinishedTournamentsPage() {
     } finally {
       setLoading(false);
     }
-  }, [fetchAllPlayers]);
+  }, [fetchAllPlayers, router]);
 
   useEffect(() => {
     void fetchFinishedTournaments();
