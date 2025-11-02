@@ -38,8 +38,6 @@ export default function MatchManager() {
   const [error, setError] = useState<string | null>(null)
 
   // Fetch all data
-
-
   const fetchData = async (): Promise<void> => {
     try {
       setError(null)
@@ -62,6 +60,15 @@ export default function MatchManager() {
       const { data: playersData, error: playersError } = await supabase
         .from('players')
         .select('player_id, player_name')
+
+      if (playersError) {
+        //.error('Players error:', playersError)
+        // Continue without players if there's an error
+        //.warn('Could not load players, continuing with matches only')
+      } else {
+        //.log('Players fetched:', playersData?.length)
+        setPlayers(playersData || [])
+      }
 
       setMatches(matchesData || [])
 
