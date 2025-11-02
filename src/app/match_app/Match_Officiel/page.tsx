@@ -155,13 +155,13 @@ export default function OfficialMatch() {
         .select('*')
         .order('player_name')
         .returns<players[]>()
-      if (error) console.error(error)
+      if (error) return
       else setPlayersList(data || [])
     }
 
     const fetchCombos = async () => {
       const { data, error } = await supabase.from('combos').select('*').returns<combos[]>()
-      if (error) console.error(error)
+      if (error) return
       else setCombosList(data || [])
     }
 
@@ -201,7 +201,7 @@ export default function OfficialMatch() {
         .single()
 
       if (deckError) {
-        console.error('❌ Erreur lors de la récupération du deck:', deckError)
+        //❌ Erreur lors de la récupération du deck:', deckError)
         setDeck(null)
         return
       }
@@ -230,7 +230,7 @@ export default function OfficialMatch() {
         .in('combo_id', comboIds)
 
       if (combosError) {
-        console.error('❌ Erreur lors de la récupération des combos:', combosError)
+        //❌ Erreur lors de la récupération des combos:', combosError)
         setDeck(deckData)
         return
       }
@@ -418,7 +418,7 @@ export default function OfficialMatch() {
         .single()
 
       if (error) {
-        console.error('❌ Erreur lors de la création du match:', error)
+        //❌ Erreur lors de la création du match:', error)
         alert(`Erreur lors de la création du match: ${error.message}`)
         return null
       }
@@ -426,7 +426,7 @@ export default function OfficialMatch() {
       console.log('✅ Match créé avec succès, ID:', data.match_id)
       return data.match_id
     } catch (error) {
-      console.error('❌ Exception lors de la création du match:', error)
+      //❌ Exception lors de la création du match:', error)
       return null
     }
   }
@@ -544,7 +544,7 @@ export default function OfficialMatch() {
         .single()
 
       if (error) {
-        console.error('Error fetching deck:', error)
+        //Error fetching deck:', error)
         setExistingDeck(null)
         return
       }
@@ -819,10 +819,10 @@ export default function OfficialMatch() {
       
     } catch (err: unknown) {
       if (err instanceof Error) {
-        console.error(err.message)
+        //console.error(err.message)
         alert(`Erreur : ${err.message}`)
       } else {
-        console.error(err)
+        //console.error(err)
         alert("Erreur lors de la création du deck.")
       }
     }
@@ -844,152 +844,212 @@ export default function OfficialMatch() {
   const player2Name = playersList.find((p) => p.player_id === selectedPlayer2)?.player_name || 'Joueur 2'
 
   return (
-    <div className="max-w-6xl mx-auto p-6 bg-gradient-to-b from-gray-900 via-gray-800 to-gray-900 text-white rounded-2xl shadow-2xl">
-      <div className="mb-6 flex justify-end">
+  <div className="min-h-screen relative overflow-hidden text-white">
+    {/* Fond cyberpunk */}
+    <div
+      className="absolute inset-0 animate-gradient-shift pointer-events-none"
+      style={{
+        backgroundImage:
+          'linear-gradient(135deg,#0b0215,#1b0b2b,#3a0c4a,#5b136b,#8b1da1,#3a0c4a,#1b0b2b,#0b0215)',
+      }}
+    />
+    <div className="absolute inset-0 bg-cyber-grid opacity-40 pointer-events-none" />
+    <div
+      className="absolute inset-0 pointer-events-none"
+      style={{
+        background:
+          'radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(0,0,0,.65) 100%)',
+      }}
+    />
+    <div className="absolute inset-0 scanlines pointer-events-none" />
+
+    {/* Contenu */}
+    <main className="relative z-10 max-w-6xl mx-auto px-5 py-8">
+      {/* Top bar */}
+      <div className="mb-6 flex items-center justify-between">
+        <span className="inline-flex items-center gap-2 text-sm text-purple-200/80">
+          <span className="size-2 rounded-full bg-emerald-400 shadow-[0_0_15px_#34d399]" />
+          Mode Admin
+        </span>
         <MainMenuButton />
       </div>
-      <h1 className="text-4xl font-extrabold mb-8 text-center tracking-wide text-purple-400">
-        ⚔️ Gestion des Matchs Officiels
-      </h1>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Left Column - Match Management */}
-        <div className="space-y-8">
+      {/* Title */}
+      <header className="text-center mb-8">
+        <h1 className="text-4xl md:text-5xl font-extrabold tracking-wide">
+          <span className="text-transparent bg-clip-text bg-gradient-to-r from-fuchsia-300 via-purple-300 to-cyan-300 drop-shadow-[0_0_8px_rgba(216,180,254,.35)]">
+            ⚔️ Gestion des Matchs Officiels
+          </span>
+        </h1>
+        <p className="mt-2 text-sm text-purple-100/70">Enregistre, valide et gère les decks en temps réel.</p>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-8">
+        {/* Colonne gauche : match */}
+        <section className="space-y-6">
           {/* Sélection joueurs */}
-          <div className="p-6 rounded-xl bg-gray-800/70 border border-green-500 shadow-lg">
-            <h2 className="text-xl font-bold mb-4 text-green-300">🎮 Gestion du Match</h2>
-            <div className="flex gap-4">
+          <div className="rounded-2xl border border-emerald-400/30 bg-white/5 backdrop-blur-md shadow-2xl shadow-emerald-500/10 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg md:text-xl font-bold text-emerald-200">🎮 Gestion du Match</h2>
+              <div className="flex gap-2">
+                <span className="px-2.5 py-1 rounded-full text-[11px] bg-emerald-400/10 border border-emerald-400/30 text-emerald-200">
+                  {round > 0 ? 'En cours' : 'Prêt'}
+                </span>
+                <span className="px-2.5 py-1 rounded-full text-[11px] bg-fuchsia-400/10 border border-fuchsia-400/30 text-fuchsia-200">
+                  Rounds: {round}
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col md:flex-row gap-4">
               {[{ label: 'Joueur 1', value: selectedPlayer1, set: setSelectedPlayer1 }, { label: 'Joueur 2', value: selectedPlayer2, set: setSelectedPlayer2 }].map(
                 (p, i) => (
                   <div key={i} className="flex-1">
-                    <label className="block mb-3 font-semibold text-green-300">{p.label}</label>
-                    <select
-                      className="bg-gray-900 border border-green-600 rounded-lg p-3 w-full text-white"
-                      value={p.value}
-                      onChange={(e) => {
-                        p.set(e.target.value)
-                        if (i === 0) setSelectedCombo1('')
-                        else setSelectedCombo2('')
-                      }}
-                    >
-                      <option value="">Sélectionnez un joueur</option>
-                      {playersList.map((pl) => (
-                        <option key={pl.player_id} value={pl.player_id}>
-                          {pl.player_name}
-                        </option>
-                      ))}
-                    </select>
+                    <label className="block mb-2 text-sm font-semibold text-emerald-200">{p.label}</label>
+                    <div className="relative">
+                      <select
+                        className="w-full appearance-none rounded-xl bg-black/40 border border-emerald-400/30 focus:border-emerald-300/70 focus:ring-2 focus:ring-emerald-400/30 outline-none text-white px-3 py-2.5 pr-9 transition"
+                        value={p.value}
+                        onChange={(e) => {
+                          p.set(e.target.value)
+                          if (i === 0) setSelectedCombo1('')
+                          else setSelectedCombo2('')
+                        }}
+                      >
+                        <option value="">Sélectionnez un joueur</option>
+                        {playersList.map((pl) => (
+                          <option key={pl.player_id} value={pl.player_id}>
+                            {pl.player_name}
+                          </option>
+                        ))}
+                      </select>
+                      <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-emerald-200/80">▾</span>
+                    </div>
                   </div>
                 )
               )}
             </div>
           </div>
 
-          {/* Combos + Score */}
-          <div className="flex flex-col gap-4">
-            {[1, 2].map((num) => {
-              const playerDeck = num === 1 ? player1Deck : player2Deck
-              const setCombo = num === 1 ? setSelectedCombo1 : setSelectedCombo2
-              const score = num === 1 ? player1Score : player2Score
-              const name = num === 1 ? player1Name : player2Name
+          {/* Combos + score */}
+          {[1, 2].map((num) => {
+            const playerDeck = num === 1 ? player1Deck : player2Deck
+            const setCombo = num === 1 ? setSelectedCombo1 : setSelectedCombo2
+            const score = num === 1 ? player1Score : player2Score
+            const name = num === 1 ? player1Name : player2Name
 
-              return (
-                <div
-                  key={num}
-                  className="border p-6 rounded-xl bg-gray-800/70 border-pink-500 shadow-xl flex flex-col"
-                >
-                  <h2 className="font-bold mb-4 text-pink-300">Combos de {name}</h2>
-                  {playerDeck ? (
-                    <div>
-                      <p className="text-sm text-gray-400 mb-2">
-                        Deck sélectionné (le plus récent)
-                      </p>
-                      <div className="space-y-2">
-                        {playerDeck.combo_id_1 && (
-                          <label className="flex items-center space-x-2 p-2 rounded hover:bg-gray-700/50">
-                            <input
-                              type="radio"
-                              name={`combo${num}`}
-                              value={playerDeck.combo_id_1}
-                              checked={(num === 1 ? selectedCombo1 : selectedCombo2) === playerDeck.combo_id_1}
-                              onChange={() => setCombo(playerDeck.combo_id_1!)}
-                              className="text-pink-500"
-                            />
-                            <span>
-                              Combo 1 - {playerDeck.combo_1_name || getComboName(playerDeck.combo_id_1)}
-                            </span>
-                          </label>
-                        )}
-                        {playerDeck.combo_id_2 && (
-                          <label className="flex items-center space-x-2 p-2 rounded hover:bg-gray-700/50">
-                            <input
-                              type="radio"
-                              name={`combo${num}`}
-                              value={playerDeck.combo_id_2}
-                              checked={(num === 1 ? selectedCombo1 : selectedCombo2) === playerDeck.combo_id_2}
-                              onChange={() => setCombo(playerDeck.combo_id_2!)}
-                              className="text-pink-500"
-                            />
-                            <span>
-                              Combo 2 - {playerDeck.combo_2_name || getComboName(playerDeck.combo_id_2)}
-                            </span>
-                          </label>
-                        )}
-                        {playerDeck.combo_id_3 && (
-                          <label className="flex items-center space-x-2 p-2 rounded hover:bg-gray-700/50">
-                            <input
-                              type="radio"
-                              name={`combo${num}`}
-                              value={playerDeck.combo_id_3}
-                              checked={(num === 1 ? selectedCombo1 : selectedCombo2) === playerDeck.combo_id_3}
-                              onChange={() => setCombo(playerDeck.combo_id_3!)}
-                              className="text-pink-500"
-                            />
-                            <span>
-                              Combo 3 - {playerDeck.combo_3_name || getComboName(playerDeck.combo_id_3)}
-                            </span>
-                          </label>
-                        )}
-                      </div>
-                    </div>
-                  ) : (
-                    <p className="text-gray-400">Pas de deck sélectionné</p>
-                  )}
-
-                  <div className="grid grid-cols-2 gap-2 mt-4">
-                    {['Spin', 'Over', 'Burst', 'Xtreme'].map((action) => (
-                      <button
-                        key={action}
-                        className={`${playerColors[num as 1 | 2]} text-white py-3 rounded-xl w-full text-lg`}
-                        disabled={!(num === 1 ? selectedCombo1 : selectedCombo2)}
-                        onClick={() =>
-                          handleScore(
-                            num as 1 | 2,
-                            action === 'Spin' ? 1 : action === 'Over' ? 2 : action === 'Burst' ? 2 : 3,
-                            action as match_action
-                          )
-                        }
-                      >
-                        {action}
-                      </button>
-                    ))}
-                  </div>
-                  <p className="mt-2 font-semibold">Score : {score}</p>
+            return (
+              <div
+                key={num}
+                className="rounded-2xl border border-pink-400/30 bg-white/5 backdrop-blur-md shadow-2xl shadow-pink-500/10 p-5"
+              >
+                <div className="flex items-center justify-between mb-3">
+                  <h3 className="text-pink-200 font-bold">Combos de {name}</h3>
+                  <span
+                    className={`px-2.5 py-1 rounded-full text-[11px] border ${
+                      (num as 1 | 2) === 1
+                        ? 'bg-blue-400/10 border-blue-400/30 text-blue-200'
+                        : 'bg-rose-400/10 border-rose-400/30 text-rose-200'
+                    }`}
+                  >
+                    Score: {score}
+                  </span>
                 </div>
-              )
-            })}
-          </div>
+
+                {playerDeck ? (
+                  <div>
+                    <p className="text-xs text-pink-100/70 mb-2">Deck sélectionné (le plus récent)</p>
+                    <div className="space-y-1.5">
+                      {playerDeck.combo_id_1 && (
+                        <label className="flex items-center gap-2 rounded-lg border border-pink-400/20 bg-black/30 px-3 py-2 hover:border-pink-300/40 transition">
+                          <input
+                            type="radio"
+                            name={`combo${num}`}
+                            value={playerDeck.combo_id_1}
+                            checked={(num === 1 ? selectedCombo1 : selectedCombo2) === playerDeck.combo_id_1}
+                            onChange={() => setCombo(playerDeck.combo_id_1!)}
+                            className="accent-pink-400"
+                          />
+                          <span className="text-sm">
+                            Combo 1 — {playerDeck.combo_1_name || getComboName(playerDeck.combo_id_1)}
+                          </span>
+                        </label>
+                      )}
+                      {playerDeck.combo_id_2 && (
+                        <label className="flex items-center gap-2 rounded-lg border border-pink-400/20 bg-black/30 px-3 py-2 hover:border-pink-300/40 transition">
+                          <input
+                            type="radio"
+                            name={`combo${num}`}
+                            value={playerDeck.combo_id_2}
+                            checked={(num === 1 ? selectedCombo1 : selectedCombo2) === playerDeck.combo_id_2}
+                            onChange={() => setCombo(playerDeck.combo_id_2!)}
+                            className="accent-pink-400"
+                          />
+                          <span className="text-sm">
+                            Combo 2 — {playerDeck.combo_2_name || getComboName(playerDeck.combo_id_2)}
+                          </span>
+                        </label>
+                      )}
+                      {playerDeck.combo_id_3 && (
+                        <label className="flex items-center gap-2 rounded-lg border border-pink-400/20 bg-black/30 px-3 py-2 hover:border-pink-300/40 transition">
+                          <input
+                            type="radio"
+                            name={`combo${num}`}
+                            value={playerDeck.combo_id_3}
+                            checked={(num === 1 ? selectedCombo1 : selectedCombo2) === playerDeck.combo_id_3}
+                            onChange={() => setCombo(playerDeck.combo_id_3!)}
+                            className="accent-pink-400"
+                          />
+                          <span className="text-sm">
+                            Combo 3 — {playerDeck.combo_3_name || getComboName(playerDeck.combo_id_3)}
+                          </span>
+                        </label>
+                      )}
+                    </div>
+                  </div>
+                ) : (
+                  <p className="text-pink-100/70 text-sm">Pas de deck sélectionné</p>
+                )}
+
+                <div className="grid grid-cols-2 gap-2 mt-4">
+                  {['Spin', 'Over', 'Burst', 'Xtreme'].map((action) => (
+                    <button
+                      key={action}
+                      className={`group relative overflow-hidden rounded-xl py-3 text-sm font-semibold
+                        ${(num as 1 | 2) === 1 ? 'bg-blue-600/80 hover:bg-blue-500' : 'bg-rose-600/80 hover:bg-rose-500'}
+                        disabled:bg-gray-700 disabled:text-gray-300 disabled:cursor-not-allowed transition`}
+                      disabled={!(num === 1 ? selectedCombo1 : selectedCombo2)}
+                      onClick={() =>
+                        handleScore(
+                          num as 1 | 2,
+                          action === 'Spin' ? 1 : action === 'Over' ? 2 : action === 'Burst' ? 2 : 3,
+                          action as match_action
+                        )
+                      }
+                    >
+                      <span className="relative z-10">{action}</span>
+                      <span className="absolute inset-0 -translate-x-full group-hover:translate-x-0 transition-transform bg-white/10" />
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
 
           {/* Historique */}
           {roundLogs.length > 0 && (
-            <div className="p-6 rounded-xl bg-gray-800/70 border border-blue-500 shadow-md">
-              <h3 className="font-semibold text-blue-300 mb-2">Historique des tours :</h3>
-              <ul className="list-disc ml-5 text-white">
+            <div className="rounded-2xl border border-cyan-400/30 bg-white/5 backdrop-blur-md shadow-2xl shadow-cyan-500/10 p-5">
+              <h3 className="text-cyan-200 font-semibold mb-2">Historique des tours</h3>
+              <ul className="space-y-1.5 text-sm">
                 {roundLogs.map((log, idx) => (
-                  <li key={idx}>
-                    Tour {log.round} : {log.player === 1 ? player1Name : player2Name} ({log.action},{' '}
-                    +{log.points}) avec <strong>{getComboName(log.winnerCombo)}</strong> contre{' '}
-                    <strong>{getComboName(log.loserCombo)}</strong>
+                  <li key={idx} className="flex items-start gap-2">
+                    <span className="mt-1 size-1.5 rounded-full bg-cyan-300 shadow-[0_0_10px_#67e8f9]" />
+                    <span>
+                      <span className="text-cyan-100/80">Tour {log.round}</span> :{' '}
+                      {log.player === 1 ? player1Name : player2Name} ({log.action}, +{log.points}) avec{' '}
+                      <strong className="text-white">{getComboName(log.winnerCombo)}</strong> contre{' '}
+                      <strong className="text-white">{getComboName(log.loserCombo)}</strong>
+                    </span>
                   </li>
                 ))}
               </ul>
@@ -999,177 +1059,193 @@ export default function OfficialMatch() {
           {/* Validation */}
           {!matchValidated && round > 0 && (
             <button
-              className="w-full py-3 text-lg font-bold bg-purple-600 hover:bg-purple-700 text-white rounded-xl shadow-lg transition-all duration-200 mb-4"
+              className="w-full rounded-2xl bg-gradient-to-r from-fuchsia-600 via-purple-600 to-cyan-600 hover:from-fuchsia-500 hover:via-purple-500 hover:to-cyan-500 text-white py-3 text-base font-bold shadow-xl shadow-purple-500/20 border border-white/10 transition"
               onClick={updatePlayerStatsAndCreateMatch}
             >
-              ✅ Valider et enregistrer le match
+              ✅ Valider & enregistrer le match
             </button>
           )}
 
           {matchValidated && createdMatchId && (
-            <div className="p-6 rounded-xl bg-gray-800/70 border border-green-500 shadow-md">
-              <h2 className="text-xl font-bold mb-2 text-green-300">Match enregistré !</h2>
-              <p className="mb-2">
+            <div className="rounded-2xl border border-emerald-400/30 bg-white/5 backdrop-blur-md shadow-2xl shadow-emerald-500/10 p-5">
+              <h2 className="text-lg font-bold text-emerald-200 mb-2">Match enregistré !</h2>
+              <p className="text-sm text-emerald-50/90 mb-1">
                 Score final : {player1Name} {player1Score} - {player2Score} {player2Name}
               </p>
-              <p className="mb-2">
-                Vainqueur :{' '}
-                {player1Score > player2Score
-                  ? player1Name
-                  : player2Score > player1Score
-                  ? player2Name
-                  : 'Égalité'}
+              <p className="text-sm text-emerald-50/90 mb-2">
+                Vainqueur : {player1Score > player2Score ? player1Name : player2Score > player1Score ? player2Name : 'Égalité'}
               </p>
-              <p className="text-sm text-gray-300 mb-4">
-                ID du match : {createdMatchId}
-              </p>
+              <p className="text-xs text-emerald-100/80 mb-4">ID du match : {createdMatchId}</p>
               <button
                 onClick={resetMatch}
-                className="w-full bg-purple-600 hover:bg-purple-700 text-white py-3 rounded-xl mt-2 font-bold shadow-lg transition-all duration-200"
+                className="w-full rounded-xl bg-purple-600/90 hover:bg-purple-500 text-white py-2.5 font-semibold transition"
               >
                 🔁 Nouveau match
               </button>
             </div>
           )}
-        </div>
+        </section>
 
-        {/* Right Column - Deck Management */}
-        <div className="space-y-8">
-          <div className="p-6 rounded-xl bg-gray-800/70 border border-purple-500 shadow-lg">
-            <h2 className="text-xl font-bold mb-4 text-purple-300">🛠️ Gestion des Decks</h2>
-            
-            {/* Sélection joueur pour deck */}
-            <div className="mb-4">
-              <label className="block mb-3 font-semibold text-purple-300">Joueur :</label>
-              <select
-                className="bg-gray-900 border border-purple-600 rounded-lg p-3 w-full text-white"
-                value={selectedPlayerForDeck}
-                onChange={(e) => handlePlayerSelectForDeck(e.target.value)}
-              >
-                <option value="">Sélectionnez un joueur</option>
-                {playersList.map((pl) => (
-                  <option key={pl.player_id} value={pl.player_id}>
-                    {pl.player_name}
-                  </option>
-                ))}
-              </select>
+        {/* Colonne droite : decks */}
+        <aside className="space-y-6">
+          <div className="rounded-2xl border border-purple-400/30 bg-white/5 backdrop-blur-md shadow-2xl shadow-purple-500/10 p-5">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg md:text-xl font-bold text-purple-200">🛠️ Gestion des Decks</h2>
+              {existingDeck && (
+                <span className="px-2.5 py-1 rounded-full text-[11px] bg-blue-400/10 border border-blue-400/30 text-blue-200">
+                  Dernier deck : {new Date(existingDeck.Date_Creation).toLocaleDateString()}
+                </span>
+              )}
             </div>
 
-            {/* Sélection nombre de combos */}
-            {selectedPlayerForDeck && (
-              <div className="mb-4">
-                <label className="block mb-3 font-semibold text-yellow-300">Nombre de combos :</label>
+            {/* Joueur deck */}
+            <div className="mb-4">
+              <label className="block mb-2 text-sm font-semibold text-purple-200">Joueur</label>
+              <div className="relative">
                 <select
-                  className="bg-gray-900 border border-yellow-600 rounded-lg p-3 w-full text-white"
-                  value={selectedComboCount}
-                  onChange={(e) => handleComboCountChange(parseInt(e.target.value))}
+                  className="w-full appearance-none rounded-xl bg-black/40 border border-purple-400/30 focus:border-purple-300/70 focus:ring-2 focus:ring-purple-400/30 outline-none text-white px-3 py-2.5 pr-9 transition"
+                  value={selectedPlayerForDeck}
+                  onChange={(e) => handlePlayerSelectForDeck(e.target.value)}
                 >
-                  <option value="0">Sélectionner...</option>
-                  {[1, 2, 3].map(count => (
-                    <option key={count} value={count}>
-                      {count} combo{count > 1 ? 's' : ''}
+                  <option value="">Sélectionnez un joueur</option>
+                  {playersList.map((pl) => (
+                    <option key={pl.player_id} value={pl.player_id}>
+                      {pl.player_name}
                     </option>
                   ))}
                 </select>
+                <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-purple-200/80">▾</span>
+              </div>
+            </div>
+
+            {/* Nombre de combos */}
+            {selectedPlayerForDeck && (
+              <div className="mb-4">
+                <label className="block mb-2 text-sm font-semibold text-yellow-200">Nombre de combos</label>
+                <div className="relative">
+                  <select
+                    className="w-full appearance-none rounded-xl bg-black/40 border border-yellow-400/30 focus:border-yellow-300/70 focus:ring-2 focus:ring-yellow-400/30 outline-none text-white px-3 py-2.5 pr-9 transition"
+                    value={selectedComboCount}
+                    onChange={(e) => handleComboCountChange(parseInt(e.target.value))}
+                  >
+                    <option value="0">Sélectionner…</option>
+                    {[1, 2, 3].map((count) => (
+                      <option key={count} value={count}>
+                        {count} combo{count > 1 ? 's' : ''}
+                      </option>
+                    ))}
+                  </select>
+                  <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-yellow-200/80">▾</span>
+                </div>
               </div>
             )}
 
-            {/* Beys */}
-            {selectedComboCount > 0 && beys.slice(0, selectedComboCount).map((bey, index) => (
-              <div
-                key={`bey-${index}-${bey.existingComboId || 'new'}`}
-                className="mb-4 p-4 rounded-xl bg-gradient-to-r from-gray-700 to-gray-800 border border-pink-500 shadow-xl"
-              >
-                {/* Display auto-generated combo name */}
-                <div className="mb-3 p-2 bg-gray-900 rounded-lg border border-pink-600">
-                  <p className="text-sm font-semibold text-pink-300 mb-1">Nom du Combo :</p>
-                  <p className="text-white font-mono text-sm">{getCurrentComboName(bey, index)}</p>
-                  {bey.existingComboId && (
-                    <p className="text-xs text-green-400 mt-1">
-                      ✨ Combo existant
+            {/* Builder */}
+            {selectedPlayerForDeck &&
+              selectedComboCount > 0 &&
+              beys.slice(0, selectedComboCount).map((bey, index) => (
+                <div
+                  key={`bey-${index}-${bey.existingComboId || 'new'}`}
+                  className="mb-4 rounded-xl border border-pink-400/30 bg-gradient-to-r from-black/30 to-black/20 p-4"
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-pink-200 font-semibold">
+                      🔥 Combo {index + 1}{' '}
+                      {bey.existingComboId && <span className="text-xs opacity-70">(existant)</span>}
                     </p>
-                  )}
+                    <span className="px-2 py-0.5 rounded-full text-[10px] bg-pink-400/10 border border-pink-400/30 text-pink-100">
+                      {getCurrentComboName(bey, index)}
+                    </span>
+                  </div>
+
+                  <div className="mb-3 flex items-center gap-2">
+                    <label className="text-sm text-pink-100/80">CX ?</label>
+                    <input
+                      type="checkbox"
+                      checked={bey.cx}
+                      onChange={(e) => handleBeyCxChange(index, e.target.checked)}
+                      className="w-4 h-4 accent-pink-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 gap-2">
+                    {(bey.cx
+                      ? [
+                          { key: 'lockChip' as const, label: 'Lock Chip' },
+                          { key: 'blade' as const, label: 'Blade' },
+                          { key: 'assist' as const, label: 'Assist' },
+                          { key: 'ratchet' as const, label: 'Ratchet' },
+                          { key: 'bit' as const, label: 'Bit' },
+                        ]
+                      : [
+                          { key: 'blade' as const, label: 'Blade' },
+                          { key: 'ratchet' as const, label: 'Ratchet' },
+                          { key: 'bit' as const, label: 'Bit' },
+                        ]
+                    ).map(({ key, label }) => {
+                      const selectedValue = bey[key] || ''
+
+                      // Sélection du bon tableau typé pour chaque clé
+                      const list =
+                        key === 'lockChip'
+                          ? lockChips
+                          : key === 'blade'
+                          ? blades
+                          : key === 'assist'
+                          ? assists
+                          : key === 'ratchet'
+                          ? ratchets
+                          : bits
+
+                      return (
+                        <select
+                          key={key}
+                          value={selectedValue}
+                          onChange={(e) => handleBeyPieceSelect(index, key, e.target.value)}
+                          className="w-full rounded-lg bg-black/40 border border-pink-400/30 focus:border-pink-300/70 focus:ring-2 focus:ring-pink-400/20 outline-none text-white px-3 py-2 text-sm transition"
+                        >
+                          <option value="">{label}</option>
+
+                          {/* mapping sans any, avec résolution d'ID par clé */}
+                          {list.map((o) => {
+                            const optionValue =
+                              key === 'lockChip'
+                                ? (o as typeof lockChips[number]).lock_chip_id
+                                : key === 'blade'
+                                ? (o as typeof blades[number]).blade_id
+                                : key === 'assist'
+                                ? (o as typeof assists[number]).assist_id
+                                : key === 'ratchet'
+                                ? (o as typeof ratchets[number]).ratchet_id
+                                : (o as typeof bits[number]).bit_id
+
+                            return (
+                              <option key={optionValue} value={optionValue}>
+                                {o.name}{' '}
+                                {'type' in o && o.type ? `(${o.type})` : ''}
+                              </option>
+                            )
+                          })}
+                        </select>
+                      )
+                    })}
+                  </div>
                 </div>
+              ))}
 
-                <p className="text-md font-bold mb-3 text-pink-300">
-                  🔥 Combo {index + 1} 
-                  {bey.existingComboId && " (Existant)"}
-                </p>
-                
-                <div className="mb-3 flex items-center gap-2">
-                  <label className="font-semibold text-sm">CX ?</label>
-                  <input
-                    type="checkbox"
-                    checked={bey.cx}
-                    onChange={e => handleBeyCxChange(index, e.target.checked)}
-                    className="w-4 h-4 accent-pink-500"
-                  />
-                </div>
-
-                <div className="grid grid-cols-1 gap-2">
-                  {(bey.cx
-                    ? [
-                        { key: "lockChip" as const, options: lockChips, label: "Lock Chip" },
-                        { key: "blade" as const, options: blades, label: "Blade" },
-                        { key: "assist" as const, options: assists, label: "Assist" },
-                        { key: "ratchet" as const, options: ratchets, label: "Ratchet" },
-                        { key: "bit" as const, options: bits, label: "Bit" },
-                      ]
-                    : [
-                        { key: "blade" as const, options: blades, label: "Blade" },
-                        { key: "ratchet" as const, options: ratchets, label: "Ratchet" },
-                        { key: "bit" as const, options: bits, label: "Bit" },
-                      ]
-                  ).map(({ key, options, label }) => {
-                    const selectedValue = bey[key] || ""
-
-                    return (
-                      <select
-                        key={key}
-                        value={selectedValue}
-                        onChange={(e) => handleBeyPieceSelect(index, key, e.target.value)}
-                        className="bg-gray-900 border border-pink-600 rounded p-2 text-white text-sm"
-                      >
-                        <option value="">{label}</option>
-                        {options.map(o => {
-                          const idKey =
-                            key === "lockChip"
-                              ? "lock_chip_id"
-                              : `${key}_id`
-                          const optionValue = o[idKey as keyof typeof o] as string
-                          return (
-                            <option key={optionValue} value={optionValue}>
-                              {o.name} {o.type ? `(${o.type})` : ""}
-                            </option>
-                          )
-                        })}
-                      </select>
-                    )
-                  })}
-                </div>
-              </div>
-            ))}
-
-            {/* Submit Button */}
+            {/* Submit */}
             {selectedPlayerForDeck && selectedComboCount > 0 && (
               <button
                 onClick={handleDeckSubmit}
-                className="w-full py-3 text-lg font-bold bg-green-600 hover:bg-green-700 text-white rounded-xl shadow-lg transition-all duration-200"
+                className="w-full rounded-2xl bg-gradient-to-r from-emerald-600 via-green-600 to-teal-600 hover:from-emerald-500 hover:via-green-500 hover:to-teal-500 text-white py-3 font-bold shadow-xl shadow-emerald-500/20 border border-white/10 transition"
               >
-                {existingDeck ? "💾 Modifier le Deck" : "⚡ Créer le Deck"}
+                {existingDeck ? '💾 Modifier le Deck' : '⚡ Créer le Deck'}
               </button>
             )}
-
-            {existingDeck && (
-              <div className="mt-3 p-3 bg-blue-600/20 rounded-lg border border-blue-500">
-                <p className="text-blue-300 text-sm">
-                  📅 Deck créé le: {new Date(existingDeck.Date_Creation).toLocaleDateString()}
-                </p>
-              </div>
-            )}
           </div>
-        </div>
+        </aside>
       </div>
-    </div>
-  )
+    </main>
+  </div>
+)
 }
