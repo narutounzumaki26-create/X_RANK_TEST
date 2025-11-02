@@ -3,6 +3,8 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from "@/lib/supabaseClient";
+import { useRouter } from 'next/navigation';
+import { useUser } from '@clerk/nextjs';
 
 // Types defined directly in the component file
 interface Match {
@@ -36,12 +38,26 @@ export default function MatchManager() {
   const [loading, setLoading] = useState<boolean>(true)
   const [deleting, setDeleting] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const router = useRouter();
+  const { user } = useUser();
 
   // Fetch all data - wrapped in useCallback to prevent unnecessary re-renders
   const fetchData = useCallback(async (): Promise<void> => {
     try {
       setError(null)
       //.log('Starting to fetch data...')
+
+      // Admin check
+      const { data: playerData } = await supabase
+        .from("players")
+        .select("Admin")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!playerData?.Admin) {
+        router.push("/");
+        return;
+      }
 
       // Fetch matches
       const { data: matchesData, error: matchesError } = await supabase
@@ -79,11 +95,13 @@ export default function MatchManager() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [user, router])
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData]) // Added fetchData to dependency array
+    if (user) {
+      fetchData()
+    }
+  }, [fetchData, user]) // Added fetchData to dependency array
 
   // Get player name by ID
   const getPlayerName = (playerId: string | undefined): string => {
