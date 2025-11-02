@@ -84,6 +84,12 @@ export default function ProfileStatsPage() {
   const paginatedMatches = matches.slice((page - 1) * 5, page * 5);
 
   useEffect(() => {
+      const checkAuth = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) {
+        router.push("/login");
+        return;
+      }
     try {
       if (page > totalPages) setPage(totalPages);
     } catch {
