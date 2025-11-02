@@ -38,16 +38,6 @@ export default function MatchManager() {
   const [error, setError] = useState<string | null>(null)
 
   // Fetch all data
-        const { data: playerData } = await supabase
-        .from("players")
-        .select("Admin")
-        .eq("user_id", user.id)
-        .single();
-
-      if (!playerData?.Admin) {
-        router.push("/");
-        return;
-      }
 
 
   const fetchData = async (): Promise<void> => {
