@@ -116,7 +116,7 @@ export default function OfficialMatch() {
   const playerColors: Record<1 | 2, string> = { 1: 'bg-blue-600', 2: 'bg-red-500' }
 
   // ======================================================
-  // 🧭 Vérification admin + récupération du player_id
+  // 🧭 Vérification admin + récupération du player_id - FIXED
   // ======================================================
   useEffect(() => {
     const checkAdmin = async () => {
@@ -127,13 +127,26 @@ export default function OfficialMatch() {
         return
       }
 
+      // First get player data to check Admin status
+      const { data: playerData } = await supabase
+        .from("players")
+        .select("Admin")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!playerData?.Admin) {
+        router.push("/");
+        return;
+      }
+
+      // Then get the full player data including player_id
       const { data: player, error } = await supabase
         .from('players')
         .select('player_id, Admin')
         .eq('user_id', user.id)
         .single<players & { Admin: boolean }>()
 
-      if (error || !player || !player.Admin) {
+      if (error || !player) {
         router.push('/')
         return
       }
