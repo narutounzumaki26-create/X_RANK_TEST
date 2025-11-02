@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabaseClient'
 import { MainMenuButton } from '@/components/navigation/MainMenuButton'
+import { useRouter } from "next/navigation";
 
 type CSSVars = React.CSSProperties & {
   ['--dur']?: string;
@@ -66,6 +67,7 @@ type PlayerStats = {
 }
 
 export default function ProfileStatsPage() {
+  const router = useRouter();
   const [playerId, setPlayerId] = useState<string>('')
   const [playerName, setPlayerName] = useState<string>('')
   const [matches, setMatches] = useState<Match[]>([])
