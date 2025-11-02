@@ -123,7 +123,7 @@ export default function OfficialMatch() {
       const { data: authData } = await supabase.auth.getUser()
       const user = authData?.user
       if (!user) {
-        router.push('/login')
+        router.push('/user_app/login')
         return
       }
 
