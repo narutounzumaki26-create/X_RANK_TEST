@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import { supabase } from "@/lib/supabaseClient"
+import { useRouter } from 'next/navigation'
 
 interface Player {
   player_id: string
@@ -52,6 +53,7 @@ export default function PlayerManager() {
   const [showForm, setShowForm] = useState<boolean>(false)
   const [deletingPlayer, setDeletingPlayer] = useState<string | null>(null)
   const [matchReferences, setMatchReferences] = useState<{ [key: string]: MatchReference[] }>({})
+  const router = useRouter();
 
   const [formData, setFormData] = useState<Partial<Player>>({
     player_name: '',
@@ -202,6 +204,25 @@ export default function PlayerManager() {
   const fetchData = async (): Promise<void> => {
     try {
       setError(null)
+
+      // Admin check
+      const { data: { user } } = await supabase.auth.getUser();
+      
+      if (!user) {
+        router.push("/");
+        return;
+      }
+
+      const { data: playerData } = await supabase
+        .from("players")
+        .select("Admin")
+        .eq("user_id", user.id)
+        .single();
+
+      if (!playerData?.Admin) {
+        router.push("/");
+        return;
+      }
 
       const { data, error: fetchError } = await supabase
         .from('players')
@@ -770,3 +791,4 @@ export default function PlayerManager() {
     </div>
   )
 }
+
