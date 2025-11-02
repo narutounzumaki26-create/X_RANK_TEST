@@ -409,7 +409,7 @@ export default function OfficialMatch() {
     }
 
     try {
-      console.log('📤 Envoi des données du match:', matchData)
+      //('📤 Envoi des données du match:', matchData)
       
       const { data, error } = await supabase
         .from('matches')
@@ -423,7 +423,7 @@ export default function OfficialMatch() {
         return null
       }
 
-      console.log('✅ Match créé avec succès, ID:', data.match_id)
+      //('✅ Match créé avec succès, ID:', data.match_id)
       return data.match_id
     } catch (error) {
       //❌ Exception lors de la création du match:', error)
