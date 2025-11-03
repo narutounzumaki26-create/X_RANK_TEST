@@ -4,7 +4,7 @@ export default function SimpleBackgroundPage() {
     <div 
       className="min-h-screen flex items-center justify-center"
       style={{
-        backgroundImage: "url('/29450ac0-1e56-47f8-b5e1-297b1229d702.png')", // Replace with your image path
+        backgroundImage: "url('https://i.ytimg.com/vi/dQxgV4oD4J4/maxresdefault.jpg')", // Replace with your image path
         backgroundSize: "cover",
         backgroundPosition: "center"
       }}
