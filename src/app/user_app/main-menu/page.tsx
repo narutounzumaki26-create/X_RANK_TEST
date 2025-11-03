@@ -40,6 +40,10 @@ export default async function MainMenuPage() {
     .select("player_name, Admin")
     .eq("user_id", user.id)
     .single();
+  if (!player) {
+      //.warn("Aucun joueur trouvé pour user:", user.id);
+      redirect("/Banhammer");
+    }
 
   const playerName = playerError || !player ? "Blader" : player.player_name;
   const isAdmin = player?.Admin === true;
