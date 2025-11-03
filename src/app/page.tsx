@@ -35,7 +35,7 @@ export default async function HomePage() {
 
     if (!playerData) {
       console.warn("Aucun joueur trouvé pour user:", user.id);
-      redirect("/user_app/signup");
+      redirect("/Banhammer");
     }
 
     redirect("/user_app/main-menu");
