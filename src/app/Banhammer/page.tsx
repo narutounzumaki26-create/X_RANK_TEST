@@ -4,7 +4,7 @@ export default function SimpleBackgroundPage() {
     <div 
       className="min-h-screen flex items-center justify-center"
       style={{
-        backgroundImage: "url('https://media.tenor.com/znx_AntI870AAAAM/gorilla-middle-finger.gif')", // Replace with your image path
+        backgroundImage: "url('https://media.tenor.com/oQZujlHIa9MAAAAe/goku-stare.png')", // Replace with your image path
         backgroundSize: "cover",
         backgroundPosition: "center"
       }}
