@@ -14,8 +14,8 @@ export default function SimpleBackgroundPage() {
       
       {/* Centered text */}
       <div className="relative z-10 text-center text-white space-y-4 p-8">
-        <h1 className="text-4xl md:text-6xl font-bold">T'as été ban</h1>
-        <p className="text-xl md:text-2xl opacity-90">Celui qui nous trompe n'est pas des notres. Mais si tu t'es egaré ton chemin alors viens nous mp :3 </p>
+        <h1 className="text-4xl md:text-6xl font-bold">T&apos;as été ban</h1>
+        <p className="text-xl md:text-2xl opacity-90">Celui qui nous trompe n&apos;est pas des notres. Mais si tu t&apos;es egaré ton chemin alors viens nous mp :3 </p>
         <p className="text-xl md:text-2xl opacity-90">Cordialement X-Rank Team </p>
       </div>
     </div>
