@@ -6,8 +6,8 @@ export const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
   {
     auth: {
-      flowType: 'pkce',
-      autoRefreshToken: true,
+      flowType: 'implicit', // Use implicit flow instead of PKCE
+      autoRefreshToken: false,
       persistSession: true,
       detectSessionInUrl: true,
     },
