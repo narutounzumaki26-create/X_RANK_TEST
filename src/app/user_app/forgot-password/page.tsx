@@ -2,13 +2,14 @@
 'use client';
 
 import { useState } from "react";
-import { supabase } from "@/lib/supabaseClient";
+import { supabasepwd } from "@/lib/supabaseClient";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 export default function ForgotPasswordPage() {
+  const supabase = supabasepwd();
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
