@@ -27,12 +27,17 @@ type PlayerData = {
   Admin: boolean;
 };
 
+type User = {
+  id: string;
+  email?: string;
+};
+
 /**
  * Menu principal joueur - Accès aux différentes fonctionnalités du système X-RANK
  */
 export default function MainMenuPage() {
   const router = useRouter();
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null);
   const [player, setPlayer] = useState<PlayerData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
