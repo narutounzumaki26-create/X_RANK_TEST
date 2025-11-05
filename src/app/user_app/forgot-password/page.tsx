@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import Link from "next/link";
 
 export default function ForgotPasswordPage() {
-  const supabase = supabasepwd();
+  const supabase = supabasepwd;
   const [email, setEmail] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
