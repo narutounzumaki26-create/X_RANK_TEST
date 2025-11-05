@@ -11,9 +11,12 @@ function AuthCallbackContent() {
   const [status, setStatus] = useState('loading');
 
   useEffect(() => {
-    // 🔥 IMMEDIATE FIX: Redirect if we're on the wrong domain
-    if (window.location.hostname !== 'x-rank.vercel.app') {
-      const correctUrl = new URL('https://x-rank.vercel.app/user_app/auth/callback');
+    // 🔥 REDIRECT if we're on the wrong domain
+    const currentDomain = window.location.hostname;
+    const correctDomain = 'x-rank-test.vercel.app';
+    
+    if (currentDomain !== correctDomain) {
+      const correctUrl = new URL(`https://${correctDomain}/user_app/auth/callback`);
       correctUrl.search = window.location.search;
       correctUrl.hash = window.location.hash;
       window.location.href = correctUrl.toString();
@@ -61,40 +64,31 @@ function AuthCallbackContent() {
         return {
           title: "Traitement en cours...",
           message: "Vérification de votre lien de réinitialisation",
-          color: "text-blue-600",
-          action: null
+          color: "text-blue-600"
         };
       case 'success':
         return {
           title: "Succès !",
           message: "Redirection vers la page de réinitialisation...",
-          color: "text-green-600",
-          action: null
+          color: "text-green-600"
         };
       case 'error':
         return {
           title: "Erreur",
-          message: "Lien invalide ou erreur de traitement.",
-          color: "text-red-600",
-          action: "request_new"
+          message: "Lien invalide ou expiré. Veuillez demander un nouveau lien.",
+          color: "text-red-600"
         };
       default:
         return {
           title: "Traitement en cours...",
           message: "Veuillez patienter",
-          color: "text-blue-600",
-          action: null
+          color: "text-blue-600"
         };
     }
   };
 
   const statusInfo = getStatusMessage();
 
-  const handleRequestNewLink = () => {
-    router.push('/user_app/forgot-password');
-  };
-
-  // ✅ RETURN JSX properly
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
       <div className="w-full max-w-md mx-4 bg-white rounded-lg shadow-lg p-6">
@@ -112,7 +106,7 @@ function AuthCallbackContent() {
           
           {status === 'error' && (
             <button 
-              onClick={handleRequestNewLink}
+              onClick={() => router.push('/user_app/forgot-password')}
               className="w-full bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded-lg mt-4"
             >
               Demander un nouveau lien
