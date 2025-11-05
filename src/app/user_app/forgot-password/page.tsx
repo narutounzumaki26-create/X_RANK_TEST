@@ -30,21 +30,17 @@ export default function ForgotPasswordPage() {
 
     setLoading(true);
     try {
-      console.log('Sending reset email to:', email);
-      
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: 'https://x-rank-test.vercel.app/user_app/auth/callback',
       });
 
       if (error) {
-        console.error('Reset password error:', error);
-        setMessage(`Erreur : ${error.message}`);
+        setMessage(`Erreur: ${error.message}`);
       } else {
-        console.log('Reset email sent successfully');
-        setMessage("✅ Un email de réinitialisation a été envoyé ! Vérifiez votre boîte de réception et vos spams. Le lien expirera dans 24 heures.");
+        setMessage("✅ Email envoyé! Utilisez le nouveau lien.");
       }
     } catch (err) {
-      console.error('Unexpected error:', err);
+      console.error(err);
       setMessage("Une erreur inattendue est survenue.");
     } finally {
       setLoading(false);
