@@ -8,6 +8,12 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 
+// Define proper types
+interface User {
+  id: string;
+  email?: string;
+  // Add other user properties you need
+}
 
 export default function ResetPasswordPage() {
   const router = useRouter();
@@ -15,11 +21,10 @@ export default function ResetPasswordPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [message, setMessage] = useState('');
   const [loading, setLoading] = useState(false);
-  const [user, setUser] = useState<any>(null);
+  const [user, setUser] = useState<User | null>(null); // Replace 'any' with proper type
   const [checkingAuth, setCheckingAuth] = useState(true);
 
   useEffect(() => {
-    // Check if user is authenticated (came from the reset link)
     const checkUser = async () => {
       try {
         const { data: { user }, error } = await supabase.auth.getUser();
@@ -84,7 +89,6 @@ export default function ResetPasswordPage() {
       } else {
         setMessage('✅ Mot de passe réinitialisé avec succès ! Redirection vers la page de connexion...');
         
-        // Sign out and redirect to login after delay
         setTimeout(async () => {
           await supabase.auth.signOut();
           router.push('/user_app/login');
@@ -148,9 +152,10 @@ export default function ResetPasswordPage() {
           ) : (
             <form onSubmit={handleResetPassword} className="space-y-4">
               <div className="space-y-2">
-                <Label htmlFor="newPassword" className="text-sm font-medium">
+                {/* Replace Label with standard label element */}
+                <label htmlFor="newPassword" className="text-sm font-medium text-gray-700 block">
                   Nouveau mot de passe
-                </Label>
+                </label>
                 <Input
                   id="newPassword"
                   type="password"
@@ -165,9 +170,10 @@ export default function ResetPasswordPage() {
               </div>
               
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-sm font-medium">
+                {/* Replace Label with standard label element */}
+                <label htmlFor="confirmPassword" className="text-sm font-medium text-gray-700 block">
                   Confirmer le mot de passe
-                </Label>
+                </label>
                 <Input
                   id="confirmPassword"
                   type="password"
