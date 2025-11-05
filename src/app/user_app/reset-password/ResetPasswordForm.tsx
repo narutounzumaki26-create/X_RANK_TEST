@@ -16,7 +16,7 @@ interface User {
 }
 
 export default function ResetPasswordPage() {
-  const supabase = supabasepwd();
+  const supabase = supabasepwd;
   const router = useRouter();
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
