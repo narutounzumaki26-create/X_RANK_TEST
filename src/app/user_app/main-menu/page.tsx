@@ -1,6 +1,9 @@
+"use client";
+
 import Link from "next/link";
-import { redirect } from "next/navigation";
-import { createSupabaseServerClient } from "@/lib/supabaseServer";
+import { useRouter } from "next/navigation";
+import { useState, useEffect } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import {
   Card,
   CardContent,
@@ -19,34 +22,126 @@ type MenuLink = {
   shadow: string;
 };
 
+type PlayerData = {
+  player_name: string;
+  Admin: boolean;
+};
+
 /**
  * Menu principal joueur - Accès aux différentes fonctionnalités du système X-RANK
  */
-export default async function MainMenuPage() {
-  const supabase = await createSupabaseServerClient();
+export default function MainMenuPage() {
+  const router = useRouter();
+  const [user, setUser] = useState<any>(null);
+  const [player, setPlayer] = useState<PlayerData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
-  // --- Vérification authentification ---
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  useEffect(() => {
+    const checkAuth = async () => {
+      try {
+        console.log("🔍 Checking auth state...");
+        
+        // Check if user is authenticated
+        const { data: { session }, error: authError } = await supabase.auth.getSession();
+        
+        if (authError) {
+          console.error("❌ Auth error:", authError);
+          setError("Erreur d'authentification");
+          router.push("/user_app/login");
+          return;
+        }
 
-  if (!user) {
-    redirect("/user_app/login");
+        if (!session) {
+          console.log("❌ No session found, redirecting to login");
+          router.push("/user_app/login");
+          return;
+        }
+
+        console.log("✅ User authenticated:", session.user.email);
+        setUser(session.user);
+
+        // Fetch player data
+        console.log("🔍 Fetching player data...");
+        const { data: playerData, error: playerError } = await supabase
+          .from("players")
+          .select("player_name, Admin")
+          .eq("user_id", session.user.id)
+          .single();
+
+        if (playerError) {
+          console.error("❌ Player data error:", playerError);
+          setError("Erreur lors du chargement du profil");
+          return;
+        }
+
+        if (!playerData) {
+          console.log("❌ No player found, redirecting to Banhammer");
+          router.push("/Banhammer");
+          return;
+        }
+
+        console.log("✅ Player data loaded:", playerData);
+        setPlayer(playerData);
+        
+      } catch (err) {
+        console.error("💥 Unexpected error:", err);
+        setError("Erreur inattendue");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    checkAuth();
+  }, [router]);
+
+  const handleSignOut = async () => {
+    try {
+      await supabase.auth.signOut();
+      router.push("/user_app/login");
+    } catch (error) {
+      console.error("Logout error:", error);
+    }
+  };
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-black">
+        <div className="text-center">
+          <div className="text-xl font-semibold text-cyan-300">Chargement...</div>
+          <div className="mt-4 flex justify-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500"></div>
+          </div>
+        </div>
+      </div>
+    );
   }
 
-  // --- Récupération du joueur ---
-  const { data: player, error: playerError } = await supabase
-    .from("players")
-    .select("player_name, Admin")
-    .eq("user_id", user.id)
-    .single();
-  if (!player) {
-      //.warn("Aucun joueur trouvé pour user:", user.id);
-      redirect("/Banhammer");
-    }
+  // Show error state
+  if (error) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-black">
+        <div className="text-center">
+          <div className="text-xl font-semibold text-red-400">{error}</div>
+          <button 
+            onClick={() => router.push("/user_app/login")}
+            className="mt-4 rounded-xl bg-blue-600 px-4 py-2 text-white"
+          >
+            Retour à la connexion
+          </button>
+        </div>
+      </div>
+    );
+  }
 
-  const playerName = playerError || !player ? "Blader" : player.player_name;
-  const isAdmin = player?.Admin === true;
+  // If no user or player data, don't render
+  if (!user || !player) {
+    return null;
+  }
+
+  const playerName = player.player_name || "Blader";
+  const isAdmin = player.Admin === true;
 
   const baseLinks: MenuLink[] = [
     {
@@ -132,7 +227,7 @@ export default async function MainMenuPage() {
       gradient: "from-slate-500/70 via-slate-600/70 to-gray-800/60",
       shadow: "shadow-[0_0_22px_rgba(148,163,184,0.25)] hover:shadow-[0_0_28px_rgba(200,213,225,0.45)]",
     },
-        {
+    {
       href: "/match_app/Match_Officiel",
       label: "Match Officiel",
       icon: "🌀",
@@ -141,14 +236,6 @@ export default async function MainMenuPage() {
       shadow: "shadow-[0_0_22px_rgba(148,163,184,0.25)] hover:shadow-[0_0_28px_rgba(200,213,225,0.45)]",
     },
   ];
-
-  // --- Fonction serveur de déconnexion ---
-  async function signOut() {
-    "use server";
-    const supabase = await createSupabaseServerClient();
-    await supabase.auth.signOut();
-    redirect("/user_app/login");
-  }
 
   return (
     <CyberPage
@@ -159,14 +246,12 @@ export default async function MainMenuPage() {
           ? "Sélectionne un mode de jeu ou accède aux outils administrateur."
           : "Choisis ta destination pour poursuivre ta progression.",
         actions: (
-          <form action={signOut}>
-            <button
-              type="submit"
-              className="inline-flex items-center justify-center rounded-xl border border-rose-500/60 bg-gradient-to-r from-rose-600/80 via-red-600/80 to-pink-700/80 px-5 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-white shadow-[0_0_16px_rgba(255,90,120,0.45)] transition hover:-translate-y-0.5 hover:shadow-[0_0_28px_rgba(255,120,150,0.6)]"
-            >
-              🚪 Déconnexion
-            </button>
-          </form>
+          <button
+            onClick={handleSignOut}
+            className="inline-flex items-center justify-center rounded-xl border border-rose-500/60 bg-gradient-to-r from-rose-600/80 via-red-600/80 to-pink-700/80 px-5 py-2 text-sm font-semibold uppercase tracking-[0.2em] text-white shadow-[0_0_16px_rgba(255,90,120,0.45)] transition hover:-translate-y-0.5 hover:shadow-[0_0_28px_rgba(255,120,150,0.6)]"
+          >
+            🚪 Déconnexion
+          </button>
         ),
       }}
       contentClassName="mx-auto w-full max-w-5xl gap-6"
