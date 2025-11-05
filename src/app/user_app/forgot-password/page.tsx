@@ -30,18 +30,21 @@ export default function ForgotPasswordPage() {
 
     setLoading(true);
     try {
-      // 🚀 HARDCODE THE CORRECT DOMAIN
+      console.log('Sending reset email to:', email);
+      
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
         redirectTo: 'https://x-rank-test.vercel.app/user_app/auth/callback',
       });
 
       if (error) {
+        console.error('Reset password error:', error);
         setMessage(`Erreur : ${error.message}`);
       } else {
-        setMessage("📧 Un email de réinitialisation a été envoyé ! Vérifiez votre boîte de réception.");
+        console.log('Reset email sent successfully');
+        setMessage("✅ Un email de réinitialisation a été envoyé ! Vérifiez votre boîte de réception et vos spams. Le lien expirera dans 24 heures.");
       }
     } catch (err) {
-      console.error(err);
+      console.error('Unexpected error:', err);
       setMessage("Une erreur inattendue est survenue.");
     } finally {
       setLoading(false);
@@ -56,7 +59,7 @@ export default function ForgotPasswordPage() {
             Mot de passe oublié ?
           </CardTitle>
           <CardDescription className="text-center">
-            Entrez votre adresse email et nous vous enverrons un lien de réinitialisation.
+            Entrez votre adresse email pour recevoir un lien de réinitialisation.
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -86,7 +89,7 @@ export default function ForgotPasswordPage() {
             
             {message && (
               <div className={`p-3 rounded-lg text-center text-sm ${
-                message.includes("envoyé") 
+                message.includes("✅") 
                   ? "bg-green-100 text-green-700 border border-green-200" 
                   : "bg-red-100 text-red-700 border border-red-200"
               }`}>
