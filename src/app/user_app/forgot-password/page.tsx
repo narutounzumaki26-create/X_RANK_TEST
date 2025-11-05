@@ -30,9 +30,9 @@ export default function ForgotPasswordPage() {
 
     setLoading(true);
     try {
-      // 🚀 FAST FIX: Hardcode the production domain
+      // 🚀 HARDCODE THE CORRECT DOMAIN
       const { error } = await supabase.auth.resetPasswordForEmail(email, {
-        redirectTo: 'https://x-rank.vercel.app/user_app/auth/callback',
+        redirectTo: 'https://x-rank-test.vercel.app/user_app/auth/callback',
       });
 
       if (error) {
