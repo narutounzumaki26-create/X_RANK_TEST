@@ -37,7 +37,7 @@ export default function ForgotPasswordPage() {
       if (error) {
         setMessage(`Erreur: ${error.message}`);
       } else {
-        setMessage("✅ Email envoyé! Utilisez le nouveau lien.");
+        setMessage("✅ Email envoyé! Utilisez le lien dans votre email.");
       }
     } catch (err) {
       console.error(err);
