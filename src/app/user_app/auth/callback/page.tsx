@@ -95,21 +95,19 @@ export default function AuthCallback() {
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-gray-50">
-      <Card className="w-full max-w-md mx-4">
-        <CardContent className="pt-6">
-          <div className="text-center space-y-4">
-            <div className={`text-2xl font-semibold ${statusInfo.color}`}>
-              {statusInfo.title}
-            </div>
-            <p className="text-gray-600">{statusInfo.message}</p>
-            {status === 'loading' && (
-              <div className="flex justify-center">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-              </div>
-            )}
+      <div className="w-full max-w-md mx-4 bg-white rounded-lg shadow-lg p-6">
+        <div className="text-center space-y-4">
+          <div className={`text-2xl font-semibold ${statusInfo.color}`}>
+            {statusInfo.title}
           </div>
-        </CardContent>
-      </Card>
+          <p className="text-gray-600">{statusInfo.message}</p>
+          {status === 'loading' && (
+            <div className="flex justify-center">
+              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
+            </div>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
