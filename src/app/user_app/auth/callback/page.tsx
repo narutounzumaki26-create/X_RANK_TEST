@@ -22,7 +22,7 @@ function AuthCallbackContent() {
 
         if (error) {
           console.error('Auth error from URL:', error, errorDescription);
-          setErrorMessage(errorDescription || 'Erreur d\'authentification');
+          setErrorMessage(errorDescription || 'Erreur d&apos;authentification');
           setStatus('error');
           return;
         }
@@ -126,8 +126,8 @@ function AuthCallbackContent() {
             <p>Si le problème persiste, vérifiez que :</p>
             <ul className="list-disc list-inside text-left mt-2 space-y-1">
               <li>Vous utilisez le lien le plus récent</li>
-              <li>Le lien n'a pas expiré (24h maximum)</li>
-              <li>Vous n'avez pas déjà utilisé ce lien</li>
+              <li>Le lien n&apos;a pas expiré (24h maximum)</li>
+              <li>Vous n&apos;avez pas déjà utilisé ce lien</li>
             </ul>
           </div>
         </div>
